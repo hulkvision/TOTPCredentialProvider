@@ -4,9 +4,12 @@
  *
  * Usage:
  *   TOTPSetup.exe                  Interactive wizard
- *   TOTPSetup.exe /install         Silent install (DLL must be alongside EXE)
+ *   TOTPSetup.exe /install         Silent install
  *   TOTPSetup.exe /uninstall       Silent uninstall
  *   TOTPSetup.exe /install /issuer "MyCompany" /excluded "DOMAIN\Admin"
+ *
+ * The DLL is embedded inside this EXE as a binary resource.
+ * Only this single EXE file needs to be distributed.
  *
  * What it does:
  *   INSTALL:
@@ -33,6 +36,7 @@
 #include <iostream>
 #include <io.h>
 #include <fcntl.h>
+#include "setup_resource.h"
 
 #pragma comment(lib, "shlwapi.lib")
 #pragma comment(lib, "advapi32.lib")
@@ -247,10 +251,64 @@ bool DLLExistsInSystem32()
     return PathFileExistsW(path.c_str()) != FALSE;
 }
 
-bool DLLExistsNextToExe()
+// ---------------------------------------------------------------------------
+// ExtractEmbeddedDLL — Extract the DLL from embedded resources to a target path
+// ---------------------------------------------------------------------------
+bool ExtractEmbeddedDLL(const std::wstring& targetPath)
 {
-    std::wstring path = GetExeDirectory() + L"\\" + DLL_FILENAME;
-    return PathFileExistsW(path.c_str()) != FALSE;
+    HMODULE hModule = GetModuleHandleW(nullptr);
+    HRSRC hRes = FindResourceW(hModule, MAKEINTRESOURCEW(IDR_CREDENTIAL_PROVIDER_DLL), IDR_DLL_TYPE);
+    if (!hRes)
+    {
+        Console::PrintError(L"Embedded DLL resource not found! (FindResource failed)");
+        return false;
+    }
+
+    HGLOBAL hData = LoadResource(hModule, hRes);
+    if (!hData)
+    {
+        Console::PrintError(L"Failed to load embedded DLL resource");
+        return false;
+    }
+
+    void* pData = LockResource(hData);
+    DWORD dwSize = SizeofResource(hModule, hRes);
+    if (!pData || dwSize == 0)
+    {
+        Console::PrintError(L"Embedded DLL resource is empty");
+        return false;
+    }
+
+    // Write the resource data to the target file
+    HANDLE hFile = CreateFileW(
+        targetPath.c_str(),
+        GENERIC_WRITE,
+        0,
+        nullptr,
+        CREATE_ALWAYS,
+        FILE_ATTRIBUTE_NORMAL,
+        nullptr);
+
+    if (hFile == INVALID_HANDLE_VALUE)
+    {
+        DWORD err = GetLastError();
+        Console::PrintError(L"Failed to create file: " + targetPath + L" (Error: " + std::to_wstring(err) + L")");
+        if (err == ERROR_ACCESS_DENIED)
+            Console::PrintInfo(L"The DLL may be in use. Try restarting and running again.");
+        return false;
+    }
+
+    DWORD bytesWritten = 0;
+    BOOL ok = WriteFile(hFile, pData, dwSize, &bytesWritten, nullptr);
+    CloseHandle(hFile);
+
+    if (!ok || bytesWritten != dwSize)
+    {
+        Console::PrintError(L"Failed to write DLL file (wrote " + std::to_wstring(bytesWritten) + L" of " + std::to_wstring(dwSize) + L" bytes)");
+        return false;
+    }
+
+    return true;
 }
 
 // ---------------------------------------------------------------------------
@@ -344,35 +402,23 @@ bool DoInstall(const InstallConfig& cfg)
 {
     bool allOK = true;
 
-    // Step 1: Copy DLL to System32
-    Console::PrintStep(L"Copying DLL to System32...");
+    // Step 1: Extract embedded DLL to System32
+    Console::PrintStep(L"Extracting DLL to System32...");
     {
-        std::wstring srcPath = GetExeDirectory() + L"\\" + DLL_FILENAME;
         std::wstring dstPath = GetSystem32Path() + L"\\" + DLL_FILENAME;
 
-        if (!PathFileExistsW(srcPath.c_str()))
-        {
-            Console::PrintError(L"DLL not found: " + srcPath);
-            Console::PrintInfo(L"Place TOTPCredentialProvider.dll in the same folder as this setup.");
-            return false;
-        }
-
-        // If DLL already exists, try to overwrite
+        // If DLL already exists, warn
         if (PathFileExistsW(dstPath.c_str()))
         {
             Console::PrintWarning(L"DLL already exists in System32 — overwriting...");
         }
 
-        if (CopyFileW(srcPath.c_str(), dstPath.c_str(), FALSE))
+        if (ExtractEmbeddedDLL(dstPath))
         {
-            Console::PrintOK(L"DLL copied to " + dstPath);
+            Console::PrintOK(L"DLL extracted to " + dstPath);
         }
         else
         {
-            DWORD err = GetLastError();
-            Console::PrintError(L"Failed to copy DLL. Error: " + std::to_wstring(err));
-            if (err == ERROR_ACCESS_DENIED)
-                Console::PrintInfo(L"The DLL may be in use. Try restarting and running again.");
             allOK = false;
         }
     }
@@ -582,14 +628,19 @@ void RunInstallWizard()
     Console::SetColor(Console::WHITE);
     std::wcout << L"  ─────────────────────────────────────────\n";
 
-    // Check DLL
-    if (!DLLExistsNextToExe())
+    // Verify embedded DLL resource exists
     {
-        Console::PrintError(L"TOTPCredentialProvider.dll not found!");
-        Console::PrintInfo(L"Place the DLL in the same folder as TOTPSetup.exe and try again.");
-        return;
+        HRSRC hRes = FindResourceW(GetModuleHandleW(nullptr),
+            MAKEINTRESOURCEW(IDR_CREDENTIAL_PROVIDER_DLL), IDR_DLL_TYPE);
+        if (!hRes)
+        {
+            Console::PrintError(L"Embedded DLL resource not found in this EXE!");
+            Console::PrintInfo(L"The setup EXE may be corrupt. Please re-download.");
+            return;
+        }
+        DWORD size = SizeofResource(GetModuleHandleW(nullptr), hRes);
+        Console::PrintOK(L"Embedded DLL verified (" + std::to_wstring(size / 1024) + L" KB)");
     }
-    Console::PrintOK(L"DLL found: " + GetExeDirectory() + L"\\" + DLL_FILENAME);
 
     // Issuer name
     cfg.issuerName = Console::Prompt(L"Issuer name (shown in authenticator app)", L"Windows");
@@ -624,6 +675,7 @@ void RunInstallWizard()
     if (!cfg.excludedAccount.empty())
         Console::PrintInfo(L"  Excluded:        " + cfg.excludedAccount);
     Console::PrintInfo(L"  Logging:         " + std::wstring(cfg.enableLogging ? L"ON" : L"OFF"));
+    Console::PrintInfo(L"  DLL source:      Embedded in this EXE");
     Console::PrintInfo(L"  DLL destination: " + GetSystem32Path() + L"\\" + DLL_FILENAME);
 
     if (!Console::PromptYesNo(L"Proceed with installation?", true))
