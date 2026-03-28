@@ -164,12 +164,21 @@
     <None Include="Setup.exe.manifest" />
   </ItemGroup>
   <!-- Pre-build: Copy the DLL into the Setup folder so it can be embedded as a resource -->
-  <PropertyGroup>
-    <PreBuildEventMessage>Copying TOTPCredentialProvider.dll for embedding...</PreBuildEventMessage>
-  </PropertyGroup>
   <ItemDefinitionGroup>
     <PreBuildEvent>
-      <Command>copy /Y "$(SolutionDir)$(Platform)\$(Configuration)\TOTPCredentialProvider.dll" "$(ProjectDir)TOTPCredentialProvider.dll" 2>nul || copy /Y "$(SolutionDir)CredentialProvider\$(Platform)\$(Configuration)\TOTPCredentialProvider.dll" "$(ProjectDir)TOTPCredentialProvider.dll" 2>nul || echo WARNING: DLL not found - build the TOTPCredentialProvider project first!</Command>
+      <Message>Copying TOTPCredentialProvider.dll for embedding...</Message>
+      <Command>
+if exist "$(SolutionDir)$(Platform)\$(Configuration)\TOTPCredentialProvider.dll" (
+  copy /Y "$(SolutionDir)$(Platform)\$(Configuration)\TOTPCredentialProvider.dll" "$(ProjectDir)TOTPCredentialProvider.dll"
+) else if exist "$(SolutionDir)CredentialProvider\$(Platform)\$(Configuration)\TOTPCredentialProvider.dll" (
+  copy /Y "$(SolutionDir)CredentialProvider\$(Platform)\$(Configuration)\TOTPCredentialProvider.dll" "$(ProjectDir)TOTPCredentialProvider.dll"
+) else if exist "$(SolutionDir)CredentialProvider\$(Configuration)\TOTPCredentialProvider.dll" (
+  copy /Y "$(SolutionDir)CredentialProvider\$(Configuration)\TOTPCredentialProvider.dll" "$(ProjectDir)TOTPCredentialProvider.dll"
+) else (
+  echo ERROR: TOTPCredentialProvider.dll not found. Build the TOTPCredentialProvider project first.
+  exit /b 1
+)
+      </Command>
     </PreBuildEvent>
   </ItemDefinitionGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

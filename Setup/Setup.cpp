@@ -257,7 +257,7 @@ bool DLLExistsInSystem32()
 bool ExtractEmbeddedDLL(const std::wstring& targetPath)
 {
     HMODULE hModule = GetModuleHandleW(nullptr);
-    HRSRC hRes = FindResourceW(hModule, MAKEINTRESOURCEW(IDR_CREDENTIAL_PROVIDER_DLL), IDR_DLL_TYPE);
+    HRSRC hRes = FindResourceW(hModule, MAKEINTRESOURCEW(IDR_CREDENTIAL_PROVIDER_DLL), RT_RCDATA);
     if (!hRes)
     {
         Console::PrintError(L"Embedded DLL resource not found! (FindResource failed)");
@@ -631,7 +631,7 @@ void RunInstallWizard()
     // Verify embedded DLL resource exists
     {
         HRSRC hRes = FindResourceW(GetModuleHandleW(nullptr),
-            MAKEINTRESOURCEW(IDR_CREDENTIAL_PROVIDER_DLL), IDR_DLL_TYPE);
+            MAKEINTRESOURCEW(IDR_CREDENTIAL_PROVIDER_DLL), RT_RCDATA);
         if (!hRes)
         {
             Console::PrintError(L"Embedded DLL resource not found in this EXE!");

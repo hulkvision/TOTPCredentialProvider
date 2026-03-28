@@ -3,7 +3,7 @@
 
 #include "setup_resource.h"
 
-// The DLL is embedded as a custom BINARY resource.
+// The DLL is embedded as an RCDATA resource.
 // At build time, the DLL must exist at this relative path.
-// The post-build event on the DLL project copies it here.
-IDR_CREDENTIAL_PROVIDER_DLL BINARY "TOTPCredentialProvider.dll"
+// The pre-build event on the Setup project copies it here.
+IDR_CREDENTIAL_PROVIDER_DLL RCDATA "TOTPCredentialProvider.dll"

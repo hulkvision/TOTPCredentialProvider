@@ -6,6 +6,11 @@
 
 #pragma once
 
+// Must be defined before any Windows header that might pull in security.h
+#ifndef SECURITY_WIN32
+#define SECURITY_WIN32
+#endif
+
 #include <windows.h>
 #include <unknwn.h>
 

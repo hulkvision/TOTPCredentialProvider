@@ -448,8 +448,9 @@ HRESULT CCredential::Connect(__in IQueryContinueWithStatus* pqcws)
         // Case-insensitive compare
         wstring excludedUpper = _config->excludedAccount;
         wstring compareUpper = toCompare;
-        transform(excludedUpper.begin(), excludedUpper.end(), excludedUpper.begin(), ::towupper);
-        transform(compareUpper.begin(), compareUpper.end(), compareUpper.begin(), ::towupper);
+        auto toUpper = [](wchar_t c) { return static_cast<wchar_t>(towupper(c)); };
+        transform(excludedUpper.begin(), excludedUpper.end(), excludedUpper.begin(), toUpper);
+        transform(compareUpper.begin(), compareUpper.end(), compareUpper.begin(), toUpper);
 
         if (compareUpper == excludedUpper)
         {
