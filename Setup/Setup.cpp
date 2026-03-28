@@ -54,6 +54,15 @@ static const wchar_t* REG_CLSID_PATH   = L"SOFTWARE\\Classes\\CLSID\\{A1B2C3D4-E
 static const wchar_t* REG_INPROC_PATH  = L"SOFTWARE\\Classes\\CLSID\\{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}\\InprocServer32";
 static const wchar_t* REG_SECRETS_PATH = L"SOFTWARE\\TOTPCredentialProvider";
 
+// Filter DLL constants
+static const wchar_t* FILTER_CLSID      = L"{B1C2D3E4-F5A6-4B7C-8D9E-0F1A2B3C4D5E}";
+static const wchar_t* FILTER_DLL_FILENAME = L"TOTPCredentialProviderFilter.dll";
+static const wchar_t* FILTER_NAME       = L"TOTP Credential Provider Filter";
+
+static const wchar_t* REG_FILTER_PATH   = L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Authentication\\Credential Provider Filters\\{B1C2D3E4-F5A6-4B7C-8D9E-0F1A2B3C4D5E}";
+static const wchar_t* REG_FILTER_CLSID  = L"SOFTWARE\\Classes\\CLSID\\{B1C2D3E4-F5A6-4B7C-8D9E-0F1A2B3C4D5E}";
+static const wchar_t* REG_FILTER_INPROC = L"SOFTWARE\\Classes\\CLSID\\{B1C2D3E4-F5A6-4B7C-8D9E-0F1A2B3C4D5E}\\InprocServer32";
+
 // ---------------------------------------------------------------------------
 // Console helpers
 // ---------------------------------------------------------------------------
@@ -252,22 +261,22 @@ bool DLLExistsInSystem32()
 }
 
 // ---------------------------------------------------------------------------
-// ExtractEmbeddedDLL — Extract the DLL from embedded resources to a target path
+// ExtractEmbeddedDLL - Extract a DLL from embedded resources to a target path
 // ---------------------------------------------------------------------------
-bool ExtractEmbeddedDLL(const std::wstring& targetPath)
+bool ExtractEmbeddedDLL(const std::wstring& targetPath, int resourceId)
 {
     HMODULE hModule = GetModuleHandleW(nullptr);
-    HRSRC hRes = FindResourceW(hModule, MAKEINTRESOURCEW(IDR_CREDENTIAL_PROVIDER_DLL), RT_RCDATA);
+    HRSRC hRes = FindResourceW(hModule, MAKEINTRESOURCEW(resourceId), RT_RCDATA);
     if (!hRes)
     {
-        Console::PrintError(L"Embedded DLL resource not found! (FindResource failed)");
+        Console::PrintError(L"Embedded resource not found! (Resource ID: " + std::to_wstring(resourceId) + L")");
         return false;
     }
 
     HGLOBAL hData = LoadResource(hModule, hRes);
     if (!hData)
     {
-        Console::PrintError(L"Failed to load embedded DLL resource");
+        Console::PrintError(L"Failed to load embedded resource");
         return false;
     }
 
@@ -275,7 +284,7 @@ bool ExtractEmbeddedDLL(const std::wstring& targetPath)
     DWORD dwSize = SizeofResource(hModule, hRes);
     if (!pData || dwSize == 0)
     {
-        Console::PrintError(L"Embedded DLL resource is empty");
+        Console::PrintError(L"Embedded resource is empty");
         return false;
     }
 
@@ -402,29 +411,30 @@ bool DoInstall(const InstallConfig& cfg)
 {
     bool allOK = true;
 
-    // Step 1: Extract embedded DLL to System32
-    Console::PrintStep(L"Extracting DLL to System32...");
+    // Step 1: Extract embedded DLLs to System32
+    Console::PrintStep(L"Extracting DLLs to System32...");
     {
         std::wstring dstPath = GetSystem32Path() + L"\\" + DLL_FILENAME;
-
-        // If DLL already exists, warn
         if (PathFileExistsW(dstPath.c_str()))
-        {
-            Console::PrintWarning(L"DLL already exists in System32 - overwriting...");
-        }
+            Console::PrintWarning(L"Provider DLL already exists - overwriting...");
 
-        if (ExtractEmbeddedDLL(dstPath))
-        {
-            Console::PrintOK(L"DLL extracted to " + dstPath);
-        }
+        if (ExtractEmbeddedDLL(dstPath, IDR_CREDENTIAL_PROVIDER_DLL))
+            Console::PrintOK(L"Provider DLL extracted to " + dstPath);
         else
-        {
             allOK = false;
-        }
+
+        std::wstring filterPath = GetSystem32Path() + L"\\" + FILTER_DLL_FILENAME;
+        if (PathFileExistsW(filterPath.c_str()))
+            Console::PrintWarning(L"Filter DLL already exists - overwriting...");
+
+        if (ExtractEmbeddedDLL(filterPath, IDR_CREDENTIAL_PROVIDER_FILTER))
+            Console::PrintOK(L"Filter DLL extracted to " + filterPath);
+        else
+            allOK = false;
     }
 
-    // Step 2: Register COM CLSID
-    Console::PrintStep(L"Registering COM class...");
+    // Step 2: Register COM CLSID for Provider
+    Console::PrintStep(L"Registering COM classes...");
     {
         std::wstring dllFullPath = GetSystem32Path() + L"\\" + DLL_FILENAME;
 
@@ -434,25 +444,47 @@ bool DoInstall(const InstallConfig& cfg)
         if (ok)
         {
             SetRegString(HKEY_LOCAL_MACHINE, REG_INPROC_PATH, L"ThreadingModel", L"Apartment");
-            Console::PrintOK(L"COM class registered: " + std::wstring(PROVIDER_CLSID));
+            Console::PrintOK(L"Provider COM class registered: " + std::wstring(PROVIDER_CLSID));
         }
         else
         {
-            Console::PrintError(L"Failed to create COM registry keys");
+            Console::PrintError(L"Failed to create Provider COM registry keys");
+            allOK = false;
+        }
+
+        // Filter COM registration
+        std::wstring filterFullPath = GetSystem32Path() + L"\\" + FILTER_DLL_FILENAME;
+        ok = true;
+        ok &= CreateRegKey(HKEY_LOCAL_MACHINE, REG_FILTER_CLSID, FILTER_NAME);
+        ok &= CreateRegKey(HKEY_LOCAL_MACHINE, REG_FILTER_INPROC, filterFullPath);
+        if (ok)
+        {
+            SetRegString(HKEY_LOCAL_MACHINE, REG_FILTER_INPROC, L"ThreadingModel", L"Apartment");
+            Console::PrintOK(L"Filter COM class registered: " + std::wstring(FILTER_CLSID));
+        }
+        else
+        {
+            Console::PrintError(L"Failed to create Filter COM registry keys");
             allOK = false;
         }
     }
 
-    // Step 3: Register as Credential Provider
-    Console::PrintStep(L"Registering Credential Provider...");
+    // Step 3: Register as Credential Provider + Filter
+    Console::PrintStep(L"Registering Credential Provider and Filter...");
     {
         if (CreateRegKey(HKEY_LOCAL_MACHINE, REG_CP_PATH, PROVIDER_NAME))
-        {
             Console::PrintOK(L"Credential Provider registered with Windows");
-        }
         else
         {
             Console::PrintError(L"Failed to register Credential Provider");
+            allOK = false;
+        }
+
+        if (CreateRegKey(HKEY_LOCAL_MACHINE, REG_FILTER_PATH, FILTER_NAME))
+            Console::PrintOK(L"Credential Provider Filter registered with Windows");
+        else
+        {
+            Console::PrintError(L"Failed to register Credential Provider Filter");
             allOK = false;
         }
     }
@@ -515,58 +547,80 @@ bool DoUninstall(bool removeSecrets, bool silent)
 {
     bool allOK = true;
 
-    // Step 1: Remove Credential Provider registration
+    // Step 1: Remove Credential Provider and Filter registration
     Console::PrintStep(L"Removing Credential Provider registration...");
     {
         if (DeleteRegTree(HKEY_LOCAL_MACHINE, REG_CP_PATH))
             Console::PrintOK(L"Credential Provider unregistered");
         else
-        {
             Console::PrintWarning(L"Credential Provider registration not found (already removed?)");
-        }
-    }
 
-    // Step 2: Remove COM CLSID
-    Console::PrintStep(L"Removing COM class registration...");
-    {
-        // Delete the full CLSID tree (includes InprocServer32 and config values)
-        if (DeleteRegTree(HKEY_LOCAL_MACHINE, REG_CLSID_PATH))
-            Console::PrintOK(L"COM class unregistered");
+        if (DeleteRegTree(HKEY_LOCAL_MACHINE, REG_FILTER_PATH))
+            Console::PrintOK(L"Credential Provider Filter unregistered");
         else
-            Console::PrintWarning(L"COM class registration not found");
+            Console::PrintWarning(L"Filter registration not found (already removed?)");
     }
 
-    // Step 3: Delete DLL from System32
-    Console::PrintStep(L"Removing DLL from System32...");
+    // Step 2: Remove COM CLSIDs
+    Console::PrintStep(L"Removing COM class registrations...");
     {
+        if (DeleteRegTree(HKEY_LOCAL_MACHINE, REG_CLSID_PATH))
+            Console::PrintOK(L"Provider COM class unregistered");
+        else
+            Console::PrintWarning(L"Provider COM class registration not found");
+
+        if (DeleteRegTree(HKEY_LOCAL_MACHINE, REG_FILTER_CLSID))
+            Console::PrintOK(L"Filter COM class unregistered");
+        else
+            Console::PrintWarning(L"Filter COM class registration not found");
+    }
+
+    // Step 3: Delete DLLs from System32
+    Console::PrintStep(L"Removing DLLs from System32...");
+    {
+        // Remove Provider DLL
         std::wstring dllPath = GetSystem32Path() + L"\\" + DLL_FILENAME;
         if (PathFileExistsW(dllPath.c_str()))
         {
             if (DeleteFileW(dllPath.c_str()))
-            {
-                Console::PrintOK(L"DLL deleted: " + dllPath);
-            }
+                Console::PrintOK(L"Provider DLL deleted: " + dllPath);
             else
             {
                 DWORD err = GetLastError();
-                Console::PrintError(L"Failed to delete DLL. Error: " + std::to_wstring(err));
+                Console::PrintError(L"Failed to delete Provider DLL. Error: " + std::to_wstring(err));
                 if (err == ERROR_ACCESS_DENIED)
                 {
-                    Console::PrintInfo(L"The DLL may be in use. It will be deleted after restart.");
-                    // Schedule deletion on next boot
                     MoveFileExW(dllPath.c_str(), nullptr, MOVEFILE_DELAY_UNTIL_REBOOT);
-                    Console::PrintOK(L"DLL scheduled for deletion on next restart");
+                    Console::PrintOK(L"Provider DLL scheduled for deletion on next restart");
                 }
                 else
-                {
                     allOK = false;
-                }
             }
         }
         else
+            Console::PrintWarning(L"Provider DLL not found in System32 (already removed?)");
+
+        // Remove Filter DLL
+        std::wstring filterPath = GetSystem32Path() + L"\\" + FILTER_DLL_FILENAME;
+        if (PathFileExistsW(filterPath.c_str()))
         {
-            Console::PrintWarning(L"DLL not found in System32 (already removed?)");
+            if (DeleteFileW(filterPath.c_str()))
+                Console::PrintOK(L"Filter DLL deleted: " + filterPath);
+            else
+            {
+                DWORD err = GetLastError();
+                Console::PrintError(L"Failed to delete Filter DLL. Error: " + std::to_wstring(err));
+                if (err == ERROR_ACCESS_DENIED)
+                {
+                    MoveFileExW(filterPath.c_str(), nullptr, MOVEFILE_DELAY_UNTIL_REBOOT);
+                    Console::PrintOK(L"Filter DLL scheduled for deletion on next restart");
+                }
+                else
+                    allOK = false;
+            }
         }
+        else
+            Console::PrintWarning(L"Filter DLL not found in System32 (already removed?)");
     }
 
     // Step 4: Optionally remove user secrets

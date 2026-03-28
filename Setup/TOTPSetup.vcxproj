@@ -166,7 +166,7 @@
   <!-- Pre-build: Copy the DLL into the Setup folder so it can be embedded as a resource -->
   <ItemDefinitionGroup>
     <PreBuildEvent>
-      <Message>Copying TOTPCredentialProvider.dll for embedding...</Message>
+      <Message>Copying TOTPCredentialProvider.dll and TOTPCredentialProviderFilter.dll for embedding...</Message>
       <Command>
 if exist "$(SolutionDir)$(Platform)\$(Configuration)\TOTPCredentialProvider.dll" (
   copy /Y "$(SolutionDir)$(Platform)\$(Configuration)\TOTPCredentialProvider.dll" "$(ProjectDir)TOTPCredentialProvider.dll"
@@ -176,6 +176,17 @@ if exist "$(SolutionDir)$(Platform)\$(Configuration)\TOTPCredentialProvider.dll"
   copy /Y "$(SolutionDir)CredentialProvider\$(Configuration)\TOTPCredentialProvider.dll" "$(ProjectDir)TOTPCredentialProvider.dll"
 ) else (
   echo ERROR: TOTPCredentialProvider.dll not found. Build the TOTPCredentialProvider project first.
+  exit /b 1
+)
+
+if exist "$(SolutionDir)$(Platform)\$(Configuration)\TOTPCredentialProviderFilter.dll" (
+  copy /Y "$(SolutionDir)$(Platform)\$(Configuration)\TOTPCredentialProviderFilter.dll" "$(ProjectDir)TOTPCredentialProviderFilter.dll"
+) else if exist "$(SolutionDir)CredentialProviderFilter\$(Platform)\$(Configuration)\TOTPCredentialProviderFilter.dll" (
+  copy /Y "$(SolutionDir)CredentialProviderFilter\$(Platform)\$(Configuration)\TOTPCredentialProviderFilter.dll" "$(ProjectDir)TOTPCredentialProviderFilter.dll"
+) else if exist "$(SolutionDir)CredentialProviderFilter\$(Configuration)\TOTPCredentialProviderFilter.dll" (
+  copy /Y "$(SolutionDir)CredentialProviderFilter\$(Configuration)\TOTPCredentialProviderFilter.dll" "$(ProjectDir)TOTPCredentialProviderFilter.dll"
+) else (
+  echo ERROR: TOTPCredentialProviderFilter.dll not found. Build the TOTPCredentialProviderFilter project first.
   exit /b 1
 )
       </Command>

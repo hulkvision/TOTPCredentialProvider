@@ -1,12 +1,9 @@
-/* TOTP Credential Provider
- * Dll.cpp — COM DLL entry points and class factory
- *
- * Copyright 2026 — Apache License, Version 2.0
+/* TOTP Credential Provider Filter
+ * Dll.cpp - COM DLL entry points and class factory for the filter
  */
 
 #include <windows.h>
 #include <shlwapi.h>
-#include <fstream>
 #include "Dll.h"
 #include "guid.h"
 
@@ -15,34 +12,16 @@
 static LONG g_cRef = 0;
 HINSTANCE g_hinst = nullptr;
 
-// Early logging - always writes regardless of config
-static void EarlyLog(const char* msg)
-{
-    std::ofstream f("C:\\totp-credential-provider.log", std::ios::app);
-    if (f.is_open())
-    {
-        SYSTEMTIME st;
-        GetLocalTime(&st);
-        char ts[64];
-        sprintf_s(ts, "%04d-%02d-%02d %02d:%02d:%02d.%03d",
-            st.wYear, st.wMonth, st.wDay,
-            st.wHour, st.wMinute, st.wSecond, st.wMilliseconds);
-        f << ts << " | [DLL] " << msg << std::endl;
-        f.close();
-    }
-}
-
-extern HRESULT TOTPProvider_CreateInstance(__in REFIID riid, __deref_out void** ppv);
+extern HRESULT TOTPFilter_CreateInstance(__in REFIID riid, __deref_out void** ppv);
 
 // ---------------------------------------------------------------------------
-// CClassFactory — Standard COM class factory
+// CClassFactory
 // ---------------------------------------------------------------------------
 class CClassFactory : public IClassFactory
 {
 public:
     CClassFactory() : _cRef(1) {}
 
-    // IUnknown
 #pragma warning(disable : 4838)
     IFACEMETHODIMP QueryInterface(__in REFIID riid, __deref_out void** ppv) noexcept
     {
@@ -54,27 +33,19 @@ public:
         return QISearch(this, qit, riid, ppv);
     }
 
-    IFACEMETHODIMP_(ULONG) AddRef() noexcept
-    {
-        return InterlockedIncrement(&_cRef);
-    }
-
+    IFACEMETHODIMP_(ULONG) AddRef() noexcept { return InterlockedIncrement(&_cRef); }
     IFACEMETHODIMP_(ULONG) Release() noexcept
     {
-        LONG const cRef = InterlockedDecrement(&_cRef);
-        if (!cRef)
-            delete this;
+        LONG cRef = InterlockedDecrement(&_cRef);
+        if (!cRef) delete this;
         return cRef;
     }
 
-    // IClassFactory
     IFACEMETHODIMP CreateInstance(__in IUnknown* pUnkOuter, __in REFIID riid, __deref_out void** ppv)
     {
         HRESULT hr;
         if (!pUnkOuter)
-        {
-            hr = TOTPProvider_CreateInstance(riid, ppv);
-        }
+            hr = TOTPFilter_CreateInstance(riid, ppv);
         else
         {
             *ppv = nullptr;
@@ -95,15 +66,12 @@ private:
     long _cRef;
 };
 
-// ---------------------------------------------------------------------------
-// DLL exports
-// ---------------------------------------------------------------------------
 static HRESULT CClassFactory_CreateInstance(__in REFCLSID rclsid, __in REFIID riid, __deref_out void** ppv)
 {
     *ppv = nullptr;
     HRESULT hr;
 
-    if (CLSID_TOTPCredentialProvider == rclsid)
+    if (CLSID_TOTPCredentialProviderFilter == rclsid)
     {
         CClassFactory* pcf = new CClassFactory();
         if (pcf)
@@ -112,42 +80,25 @@ static HRESULT CClassFactory_CreateInstance(__in REFCLSID rclsid, __in REFIID ri
             pcf->Release();
         }
         else
-        {
             hr = E_OUTOFMEMORY;
-        }
     }
     else
-    {
         hr = CLASS_E_CLASSNOTAVAILABLE;
-    }
+
     return hr;
 }
 
-void DllAddRef() noexcept
-{
-    InterlockedIncrement(&g_cRef);
-}
-
-void DllRelease() noexcept
-{
-    InterlockedDecrement(&g_cRef);
-}
+void DllAddRef() noexcept  { InterlockedIncrement(&g_cRef); }
+void DllRelease() noexcept { InterlockedDecrement(&g_cRef); }
 
 STDAPI DllCanUnloadNow()
 {
-    EarlyLog("DllCanUnloadNow called");
     return (g_cRef > 0) ? S_FALSE : S_OK;
 }
 
 STDAPI DllGetClassObject(__in REFCLSID rclsid, __in REFIID riid, __deref_out void** ppv)
 {
-    EarlyLog("DllGetClassObject called");
-    HRESULT hr = CClassFactory_CreateInstance(rclsid, riid, ppv);
-    if (FAILED(hr))
-        EarlyLog("DllGetClassObject FAILED - CLSID mismatch?");
-    else
-        EarlyLog("DllGetClassObject succeeded");
-    return hr;
+    return CClassFactory_CreateInstance(rclsid, riid, ppv);
 }
 
 STDAPI_(BOOL) DllMain(__in HINSTANCE hinstDll, __in DWORD dwReason, __in void*)
@@ -156,15 +107,12 @@ STDAPI_(BOOL) DllMain(__in HINSTANCE hinstDll, __in DWORD dwReason, __in void*)
     {
     case DLL_PROCESS_ATTACH:
         DisableThreadLibraryCalls(hinstDll);
-        g_hinst = hinstDll;
-        EarlyLog("DllMain: DLL_PROCESS_ATTACH - DLL loaded successfully");
         break;
     case DLL_PROCESS_DETACH:
-        EarlyLog("DllMain: DLL_PROCESS_DETACH - DLL unloading");
-        break;
     case DLL_THREAD_ATTACH:
     case DLL_THREAD_DETACH:
         break;
     }
+    g_hinst = hinstDll;
     return TRUE;
 }

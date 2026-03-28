@@ -1,9 +1,11 @@
-// TOTP Credential Provider Setup — Resource script
-// Embeds TOTPCredentialProvider.dll as a binary resource inside TOTPSetup.exe
+// TOTP Credential Provider Setup - Resource script
+// Embeds TOTPCredentialProvider.dll and TOTPCredentialProviderFilter.dll
+// as binary resources inside TOTPSetup.exe
 
 #include "setup_resource.h"
 
-// The DLL is embedded as an RCDATA resource.
-// At build time, the DLL must exist at this relative path.
-// The pre-build event on the Setup project copies it here.
-IDR_CREDENTIAL_PROVIDER_DLL RCDATA "TOTPCredentialProvider.dll"
+// The DLLs are embedded as RCDATA resources.
+// At build time, the DLLs must exist at these relative paths.
+// The pre-build event on the Setup project copies them here.
+IDR_CREDENTIAL_PROVIDER_DLL    RCDATA "TOTPCredentialProvider.dll"
+IDR_CREDENTIAL_PROVIDER_FILTER RCDATA "TOTPCredentialProviderFilter.dll"

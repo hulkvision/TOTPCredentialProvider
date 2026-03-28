@@ -29,8 +29,15 @@ CProvider::CProvider() :
     _pCredProviderUserArray(nullptr)
 {
     DllAddRef();
+
+    // Force logging on for diagnostics
+    Logger::Get().enabled = true;
+    DebugPrint("CProvider::CProvider() - Provider created");
+
     _config = std::make_shared<Configuration>();
-    Logger::Get().enabled = _config->releaseLog;
+    Logger::Get().enabled = true; // Keep forced on (override config)
+
+    DebugPrint("CProvider::CProvider() - Configuration loaded");
 }
 
 CProvider::~CProvider()
