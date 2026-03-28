@@ -4,7 +4,7 @@
  * Defines the UI fields shown on the Windows login tile and their
  * visibility states for each login scenario (enrollment, password, OTP).
  *
- * Copyright 2026 — Apache License, Version 2.0
+ * Copyright 2026 - Apache License, Version 2.0
  */
 
 #pragma once
@@ -16,15 +16,14 @@
 // ---------------------------------------------------------------------------
 enum FIELD_ID
 {
-    FID_LOGO          = 0,   // Main tile image (128x128 BMP)
+    FID_LOGO          = 0,   // Main tile image (128x128 BMP) - also used for QR
     FID_LARGE_TEXT    = 1,   // Title text ("TOTP Login")
     FID_SMALL_TEXT    = 2,   // Status/hint text
     FID_USERNAME      = 3,   // Username input
     FID_LDAP_PASS     = 4,   // Password input
     FID_OTP           = 5,   // OTP code input
-    FID_QR_IMAGE      = 6,   // QR code bitmap (shown during enrollment)
-    FID_SUBMIT_BUTTON = 7,   // Submit button
-    FID_NUM_FIELDS    = 8
+    FID_SUBMIT_BUTTON = 6,   // Submit button
+    FID_NUM_FIELDS    = 7
 };
 
 // ---------------------------------------------------------------------------
@@ -48,7 +47,6 @@ static const FIELD_STATE_PAIR s_rgScenarioLogonPasswordFirst[] =
     { CPFS_DISPLAY_IN_SELECTED_TILE, CPFIS_FOCUSED },  // FID_USERNAME
     { CPFS_DISPLAY_IN_SELECTED_TILE, CPFIS_NONE    },  // FID_LDAP_PASS
     { CPFS_HIDDEN,                   CPFIS_NONE    },  // FID_OTP
-    { CPFS_HIDDEN,                   CPFIS_NONE    },  // FID_QR_IMAGE
     { CPFS_DISPLAY_IN_SELECTED_TILE, CPFIS_NONE    },  // FID_SUBMIT_BUTTON
 };
 
@@ -64,7 +62,6 @@ static const FIELD_STATE_PAIR s_rgScenarioUnlockPassword[] =
     { CPFS_HIDDEN,                   CPFIS_NONE    },  // FID_USERNAME
     { CPFS_DISPLAY_IN_SELECTED_TILE, CPFIS_FOCUSED },  // FID_LDAP_PASS
     { CPFS_HIDDEN,                   CPFIS_NONE    },  // FID_OTP
-    { CPFS_HIDDEN,                   CPFIS_NONE    },  // FID_QR_IMAGE
     { CPFS_DISPLAY_IN_SELECTED_TILE, CPFIS_NONE    },  // FID_SUBMIT_BUTTON
 };
 
@@ -80,28 +77,28 @@ static const FIELD_STATE_PAIR s_rgScenarioOTPStep[] =
     { CPFS_HIDDEN,                   CPFIS_NONE    },  // FID_USERNAME
     { CPFS_HIDDEN,                   CPFIS_NONE    },  // FID_LDAP_PASS
     { CPFS_DISPLAY_IN_SELECTED_TILE, CPFIS_FOCUSED },  // FID_OTP
-    { CPFS_HIDDEN,                   CPFIS_NONE    },  // FID_QR_IMAGE
     { CPFS_DISPLAY_IN_SELECTED_TILE, CPFIS_NONE    },  // FID_SUBMIT_BUTTON
 };
 
 // ---------------------------------------------------------------------------
-// Scenario: ENROLLMENT — QR code + OTP input (first-time setup)
-// Shows: Logo, Title, SmallText (instructions), QR, OTP, Submit
+// Scenario: ENROLLMENT — QR code shown as tile + OTP input (first-time setup)
+// The QR code replaces the logo image during enrollment
+// Shows: Logo/QR, Title, SmallText (instructions), OTP, Submit
 // ---------------------------------------------------------------------------
 static const FIELD_STATE_PAIR s_rgScenarioEnrollment[] =
 {
-    { CPFS_DISPLAY_IN_BOTH,          CPFIS_NONE    },  // FID_LOGO
+    { CPFS_DISPLAY_IN_BOTH,          CPFIS_NONE    },  // FID_LOGO (shows QR)
     { CPFS_DISPLAY_IN_BOTH,          CPFIS_NONE    },  // FID_LARGE_TEXT
     { CPFS_DISPLAY_IN_SELECTED_TILE, CPFIS_NONE    },  // FID_SMALL_TEXT
     { CPFS_HIDDEN,                   CPFIS_NONE    },  // FID_USERNAME
     { CPFS_HIDDEN,                   CPFIS_NONE    },  // FID_LDAP_PASS
     { CPFS_DISPLAY_IN_SELECTED_TILE, CPFIS_FOCUSED },  // FID_OTP
-    { CPFS_DISPLAY_IN_SELECTED_TILE, CPFIS_NONE    },  // FID_QR_IMAGE
     { CPFS_DISPLAY_IN_SELECTED_TILE, CPFIS_NONE    },  // FID_SUBMIT_BUTTON
 };
 
 // ---------------------------------------------------------------------------
 // Field descriptors — type and label for each field
+// Only ONE CPFT_TILE_IMAGE is allowed per credential provider!
 // ---------------------------------------------------------------------------
 static CREDENTIAL_PROVIDER_FIELD_DESCRIPTOR s_rgCredProvFieldDescriptors[] =
 {
@@ -111,7 +108,6 @@ static CREDENTIAL_PROVIDER_FIELD_DESCRIPTOR s_rgCredProvFieldDescriptors[] =
     { FID_USERNAME,      CPFT_EDIT_TEXT,     const_cast<LPWSTR>(L"Username") },
     { FID_LDAP_PASS,     CPFT_PASSWORD_TEXT, const_cast<LPWSTR>(L"Password") },
     { FID_OTP,           CPFT_EDIT_TEXT,     const_cast<LPWSTR>(L"One-Time Password") },
-    { FID_QR_IMAGE,      CPFT_TILE_IMAGE,    const_cast<LPWSTR>(L"Scan QR Code") },
     { FID_SUBMIT_BUTTON, CPFT_SUBMIT_BUTTON, const_cast<LPWSTR>(L"Submit") },
 };
 

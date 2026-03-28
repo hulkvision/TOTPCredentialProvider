@@ -15,7 +15,7 @@
 class Configuration
 {
 public:
-    // Registry path under HKEY_CLASSES_ROOT
+    // Registry path under HKEY_LOCAL_MACHINE
     static const std::wstring registryPath;
 
     Configuration();

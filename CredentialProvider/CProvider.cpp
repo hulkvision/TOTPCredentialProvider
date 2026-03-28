@@ -25,6 +25,7 @@ using namespace std;
 CProvider::CProvider() :
     _cRef(1),
     _pkiulSetSerialization(nullptr),
+    _credential(nullptr),
     _pCredProviderUserArray(nullptr)
 {
     DllAddRef();
@@ -35,7 +36,10 @@ CProvider::CProvider() :
 CProvider::~CProvider()
 {
     if (_credential != nullptr)
+    {
         _credential->Release();
+        _credential = nullptr;
+    }
 
     if (_pCredProviderUserArray != nullptr)
     {
@@ -296,7 +300,10 @@ HRESULT CProvider::GetCredentialAt(
         else
             fieldStates = s_rgScenarioLogonPasswordFirst;
 
-        _credential = std::make_unique<CCredential>(_config);
+        _credential = new (std::nothrow) CCredential(_config);
+        if (!_credential)
+            return E_OUTOFMEMORY;
+
         hr = _credential->Initialize(
             s_rgCredProvFieldDescriptors,
             fieldStates,

@@ -26,12 +26,12 @@ public:
     // IUnknown
     IFACEMETHODIMP_(ULONG) AddRef()
     {
-        return ++_cRef;
+        return InterlockedIncrement(&_cRef);
     }
 
     IFACEMETHODIMP_(ULONG) Release()
     {
-        LONG cRef = --_cRef;
+        LONG cRef = InterlockedDecrement(&_cRef);
         if (!cRef)
             delete this;
         return cRef;
@@ -88,7 +88,7 @@ private:
 private:
     LONG                                    _cRef;
     KERB_INTERACTIVE_UNLOCK_LOGON*          _pkiulSetSerialization;
-    std::unique_ptr<CCredential>            _credential;
+    CCredential*                            _credential;
     std::shared_ptr<Configuration>          _config;
     ICredentialProviderUserArray*            _pCredProviderUserArray;
 };

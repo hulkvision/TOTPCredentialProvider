@@ -235,33 +235,7 @@ HRESULT CCredential::GetBitmapValue(
 
     if (dwFieldID == FID_LOGO && phbmp)
     {
-        // Load custom bitmap or default tile
-        HBITMAP hbmp = nullptr;
-        if (!_config->bitmapPath.empty())
-        {
-            DWORD attrib = GetFileAttributesW(_config->bitmapPath.c_str());
-            if (attrib != INVALID_FILE_ATTRIBUTES)
-            {
-                hbmp = (HBITMAP)LoadImageW(nullptr, _config->bitmapPath.c_str(),
-                    IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE);
-            }
-        }
-        if (!hbmp)
-            hbmp = LoadBitmap(HINST_THISDLL, MAKEINTRESOURCE(IDB_TILE_IMAGE));
-
-        if (hbmp)
-        {
-            *phbmp = hbmp;
-            hr = S_OK;
-        }
-        else
-        {
-            hr = HRESULT_FROM_WIN32(GetLastError());
-        }
-    }
-    else if (dwFieldID == FID_QR_IMAGE && phbmp)
-    {
-        // Return the QR code bitmap (if generated during enrollment)
+        // During enrollment, show QR code as the tile image
         if (_hQRBitmap)
         {
             *phbmp = _hQRBitmap;
@@ -270,24 +244,28 @@ HRESULT CCredential::GetBitmapValue(
         }
         else
         {
-            // Return a 1x1 white pixel as placeholder when not enrolling
-            BITMAPINFO bmi = {};
-            bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-            bmi.bmiHeader.biWidth = 1;
-            bmi.bmiHeader.biHeight = 1;
-            bmi.bmiHeader.biPlanes = 1;
-            bmi.bmiHeader.biBitCount = 24;
-            bmi.bmiHeader.biCompression = BI_RGB;
-
-            void* bits = nullptr;
-            HDC hdc = GetDC(nullptr);
-            HBITMAP hbmp = CreateDIBSection(hdc, &bmi, DIB_RGB_COLORS, &bits, nullptr, 0);
-            ReleaseDC(nullptr, hdc);
-            if (hbmp && bits)
+            // Load custom bitmap or default tile
+            HBITMAP hbmp = nullptr;
+            if (!_config->bitmapPath.empty())
             {
-                memset(bits, 0xFF, 4); // White pixel
+                DWORD attrib = GetFileAttributesW(_config->bitmapPath.c_str());
+                if (attrib != INVALID_FILE_ATTRIBUTES)
+                {
+                    hbmp = (HBITMAP)LoadImageW(nullptr, _config->bitmapPath.c_str(),
+                        IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE);
+                }
+            }
+            if (!hbmp)
+                hbmp = LoadBitmap(HINST_THISDLL, MAKEINTRESOURCE(IDB_TILE_IMAGE));
+
+            if (hbmp)
+            {
                 *phbmp = hbmp;
                 hr = S_OK;
+            }
+            else
+            {
+                hr = HRESULT_FROM_WIN32(GetLastError());
             }
         }
     }

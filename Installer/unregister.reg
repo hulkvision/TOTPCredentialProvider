@@ -1,7 +1,7 @@
 Windows Registry Editor Version 5.00
 
 ; ================================================================
-; TOTP Credential Provider — Unregistration
+; TOTP Credential Provider - Unregistration
 ; Run this as Administrator to disable the credential provider
 ; ================================================================
 
@@ -9,7 +9,7 @@ Windows Registry Editor Version 5.00
 [-HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Authentication\Credential Providers\{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}]
 
 ; Remove COM registration
-[-HKEY_CLASSES_ROOT\CLSID\{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}]
+[-HKEY_LOCAL_MACHINE\SOFTWARE\Classes\CLSID\{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}]
 
 ; NOTE: This does NOT remove user TOTP secrets.
 ; To remove all user secrets, delete this registry key:

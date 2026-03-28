@@ -1,7 +1,7 @@
 Windows Registry Editor Version 5.00
 
 ; ================================================================
-; TOTP Credential Provider — Registration
+; TOTP Credential Provider - Registration
 ; Run this as Administrator to enable the credential provider
 ; ================================================================
 
@@ -9,16 +9,16 @@ Windows Registry Editor Version 5.00
 [HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\Authentication\Credential Providers\{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}]
 @="TOTP Credential Provider"
 
-; COM registration
-[HKEY_CLASSES_ROOT\CLSID\{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}]
+; COM registration (under HKLM\SOFTWARE\Classes for 64-bit)
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\CLSID\{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}]
 @="TOTP Credential Provider"
 
-[HKEY_CLASSES_ROOT\CLSID\{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}\InprocServer32]
-@="TOTPCredentialProvider.dll"
+[HKEY_LOCAL_MACHINE\SOFTWARE\Classes\CLSID\{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}\InprocServer32]
+@="C:\\Windows\\System32\\TOTPCredentialProvider.dll"
 "ThreadingModel"="Apartment"
 
-; Default configuration (optional — uncomment and modify as needed)
-; [HKEY_CLASSES_ROOT\CLSID\{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}]
+; Default configuration (optional - uncomment and modify as needed)
+; [HKEY_LOCAL_MACHINE\SOFTWARE\Classes\CLSID\{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}]
 ; "login_text"="TOTP Login"
 ; "issuer_name"="MyCompany"
 ; "totp_digits"=dword:00000006
