@@ -1,0 +1,4 @@
+// TOTP Credential Provider — Resource script
+#include "resource.h"
+
+IDB_TILE_IMAGE BITMAP "tileimage.bmp"
