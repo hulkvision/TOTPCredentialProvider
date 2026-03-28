@@ -105,14 +105,14 @@ static const FIELD_STATE_PAIR s_rgScenarioEnrollment[] =
 // ---------------------------------------------------------------------------
 static CREDENTIAL_PROVIDER_FIELD_DESCRIPTOR s_rgCredProvFieldDescriptors[] =
 {
-    { FID_LOGO,          CPFT_TILE_IMAGE,    L"TOTP Login" },
-    { FID_LARGE_TEXT,    CPFT_LARGE_TEXT,    L"TOTP Login" },
-    { FID_SMALL_TEXT,    CPFT_SMALL_TEXT,    L"" },
-    { FID_USERNAME,      CPFT_EDIT_TEXT,     L"Username" },
-    { FID_LDAP_PASS,     CPFT_PASSWORD_TEXT, L"Password" },
-    { FID_OTP,           CPFT_EDIT_TEXT,     L"One-Time Password" },
-    { FID_QR_IMAGE,      CPFT_TILE_IMAGE,    L"Scan QR Code" },
-    { FID_SUBMIT_BUTTON, CPFT_SUBMIT_BUTTON, L"Submit" },
+    { FID_LOGO,          CPFT_TILE_IMAGE,    const_cast<LPWSTR>(L"TOTP Login") },
+    { FID_LARGE_TEXT,    CPFT_LARGE_TEXT,    const_cast<LPWSTR>(L"TOTP Login") },
+    { FID_SMALL_TEXT,    CPFT_SMALL_TEXT,    const_cast<LPWSTR>(L"") },
+    { FID_USERNAME,      CPFT_EDIT_TEXT,     const_cast<LPWSTR>(L"Username") },
+    { FID_LDAP_PASS,     CPFT_PASSWORD_TEXT, const_cast<LPWSTR>(L"Password") },
+    { FID_OTP,           CPFT_EDIT_TEXT,     const_cast<LPWSTR>(L"One-Time Password") },
+    { FID_QR_IMAGE,      CPFT_TILE_IMAGE,    const_cast<LPWSTR>(L"Scan QR Code") },
+    { FID_SUBMIT_BUTTON, CPFT_SUBMIT_BUTTON, const_cast<LPWSTR>(L"Submit") },
 };
 
 // ---------------------------------------------------------------------------

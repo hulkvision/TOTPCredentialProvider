@@ -4,14 +4,17 @@
  * Copyright 2026 — Apache License, Version 2.0
  */
 
+#include <windows.h>
+#include <shlwapi.h>
 #include "Dll.h"
 #include "guid.h"
+
+#pragma comment(lib, "shlwapi.lib")
 
 static LONG g_cRef = 0;
 HINSTANCE g_hinst = nullptr;
 
 extern HRESULT TOTPProvider_CreateInstance(__in REFIID riid, __deref_out void** ppv);
-EXTERN_C GUID CLSID_TOTPCredentialProvider;
 
 // ---------------------------------------------------------------------------
 // CClassFactory — Standard COM class factory

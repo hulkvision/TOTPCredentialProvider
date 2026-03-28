@@ -11,18 +11,21 @@
 
 #pragma once
 
+#include <windows.h>
 #include <credentialprovider.h>
 #include <ntsecapi.h>
 #define SECURITY_WIN32
 #include <security.h>
 #include <intsafe.h>
-#include <windows.h>
 #include <strsafe.h>
+#include <wincred.h>
 
 #pragma warning(push)
 #pragma warning(disable : 4995)
 #include <shlwapi.h>
 #pragma warning(pop)
+
+#pragma comment(lib, "credui.lib")
 
 // Makes a copy of a field descriptor using CoTaskMemAlloc
 HRESULT FieldDescriptorCoAllocCopy(

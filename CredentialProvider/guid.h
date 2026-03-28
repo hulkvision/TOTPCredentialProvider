@@ -11,7 +11,11 @@
 #include <guiddef.h>
 
 // {A1B2C3D4-E5F6-7890-ABCD-EF1234567890}
-// Unique CLSID for TOTP Credential Provider — generated fresh, not reusing multiOTP's GUID
+// Unique CLSID for TOTP Credential Provider
+
+// In guid.cpp, INITGUID is included before this header so DEFINE_GUID
+// creates the actual symbol. In all other .cpp files, DEFINE_GUID just
+// produces an extern declaration.
 DEFINE_GUID(CLSID_TOTPCredentialProvider,
 	0xa1b2c3d4, 0xe5f6, 0x7890, 0xab, 0xcd, 0xef, 0x12, 0x34, 0x56, 0x78, 0x90);
 

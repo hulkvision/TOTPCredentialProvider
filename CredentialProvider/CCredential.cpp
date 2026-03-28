@@ -29,8 +29,10 @@
 #include "CCredential.h"
 #include "Logger.h"
 #include "resource.h"
+#include "guid.h"
 
 #include <string>
+#include <algorithm>
 #include <thread>
 #include <sddl.h>
 
@@ -794,6 +796,3 @@ HRESULT CCredential::ReportResult(
 
     return S_OK;
 }
-
-// External GUID reference
-#include "guid.h"

@@ -156,7 +156,9 @@ HRESULT KerbInteractiveUnlockLogonInit(
 
                 if (cpus == CPUS_UNLOCK_WORKSTATION)
                 {
-                    kiul.MessageType = KerbWorkstationUnlockLogon;
+                    // For unlock, the message type on the Logon struct
+                    // indicates this is a workstation unlock
+                    pkil->MessageType = KerbWorkstationUnlockLogon;
                 }
 
                 *pkiul = kiul;
@@ -213,8 +215,6 @@ HRESULT KerbInteractiveUnlockLogonPack(
             &pkilOut->Password);
         pkilOut->Password.Buffer =
             (PWSTR)((BYTE*)pkilOut->Password.Buffer - (BYTE*)pkiulOut);
-
-        pkiulOut->MessageType = rkiulIn.MessageType;
 
         *prgb = (BYTE*)pkiulOut;
         *pcb = cb;
