@@ -176,7 +176,7 @@ std::vector<uint8_t> QRCode::EncodeData(const std::string& text, int version)
     }
 
     // Terminator (up to 4 zeros)
-    int terminatorLen = std::min(4, dataCodewords * 8 - static_cast<int>(bits.size()));
+    int terminatorLen = (std::min)(4, dataCodewords * 8 - static_cast<int>(bits.size()));
     for (int i = 0; i < terminatorLen; i++)
         bits.push_back(false);
 
