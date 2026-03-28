@@ -9,16 +9,16 @@
 
 using namespace std;
 
-// Registry path: HKCR\CLSID\{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}
+// Registry path: HKLM\SOFTWARE\Classes\CLSID\{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}
 const wstring Configuration::registryPath =
-    L"CLSID\\{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}\\";
+    L"SOFTWARE\\Classes\\CLSID\\{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}";
 
 Configuration::Configuration()
 {
     // Read TOTP settings
-    totpDigits = ReadRegDword(HKEY_CLASSES_ROOT, registryPath, L"totp_digits", 6);
-    totpPeriod = ReadRegDword(HKEY_CLASSES_ROOT, registryPath, L"totp_period", 30);
-    totpWindow = ReadRegDword(HKEY_CLASSES_ROOT, registryPath, L"totp_window", 1);
+    totpDigits = ReadRegDword(HKEY_LOCAL_MACHINE, registryPath, L"totp_digits", 6);
+    totpPeriod = ReadRegDword(HKEY_LOCAL_MACHINE, registryPath, L"totp_period", 30);
+    totpWindow = ReadRegDword(HKEY_LOCAL_MACHINE, registryPath, L"totp_window", 1);
 
     // Clamp values to sane ranges
     if (totpDigits < 6) totpDigits = 6;
@@ -30,21 +30,21 @@ Configuration::Configuration()
 
     // Display text
     wstring tmp;
-    tmp = ReadRegString(HKEY_CLASSES_ROOT, registryPath, L"login_text", L"");
+    tmp = ReadRegString(HKEY_LOCAL_MACHINE, registryPath, L"login_text", L"");
     if (!tmp.empty()) loginText = tmp;
 
-    tmp = ReadRegString(HKEY_CLASSES_ROOT, registryPath, L"issuer_name", L"");
+    tmp = ReadRegString(HKEY_LOCAL_MACHINE, registryPath, L"issuer_name", L"");
     if (!tmp.empty()) issuerName = tmp;
 
-    otpFieldText     = ReadRegString(HKEY_CLASSES_ROOT, registryPath, L"otp_text", L"");
-    passFieldText    = ReadRegString(HKEY_CLASSES_ROOT, registryPath, L"password_text", L"");
-    usernameFieldText = ReadRegString(HKEY_CLASSES_ROOT, registryPath, L"username_text", L"");
+    otpFieldText     = ReadRegString(HKEY_LOCAL_MACHINE, registryPath, L"otp_text", L"");
+    passFieldText    = ReadRegString(HKEY_LOCAL_MACHINE, registryPath, L"password_text", L"");
+    usernameFieldText = ReadRegString(HKEY_LOCAL_MACHINE, registryPath, L"username_text", L"");
 
     // Behavior
-    bitmapPath      = ReadRegString(HKEY_CLASSES_ROOT, registryPath, L"v1_bitmap_path", L"");
-    excludedAccount = ReadRegString(HKEY_CLASSES_ROOT, registryPath, L"excluded_account", L"");
-    releaseLog      = ReadRegDword(HKEY_CLASSES_ROOT, registryPath, L"release_log", 0) != 0;
-    noDefault       = ReadRegDword(HKEY_CLASSES_ROOT, registryPath, L"no_default", 0) != 0;
+    bitmapPath      = ReadRegString(HKEY_LOCAL_MACHINE, registryPath, L"v1_bitmap_path", L"");
+    excludedAccount = ReadRegString(HKEY_LOCAL_MACHINE, registryPath, L"excluded_account", L"");
+    releaseLog      = ReadRegDword(HKEY_LOCAL_MACHINE, registryPath, L"release_log", 0) != 0;
+    noDefault       = ReadRegDword(HKEY_LOCAL_MACHINE, registryPath, L"no_default", 0) != 0;
 
     Logger::Get().enabled = releaseLog;
 }

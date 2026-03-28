@@ -50,8 +50,8 @@ static const wchar_t* DLL_FILENAME     = L"TOTPCredentialProvider.dll";
 static const wchar_t* PROVIDER_NAME    = L"TOTP Credential Provider";
 
 static const wchar_t* REG_CP_PATH      = L"SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Authentication\\Credential Providers\\{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}";
-static const wchar_t* REG_CLSID_PATH   = L"CLSID\\{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}";
-static const wchar_t* REG_INPROC_PATH  = L"CLSID\\{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}\\InprocServer32";
+static const wchar_t* REG_CLSID_PATH   = L"SOFTWARE\\Classes\\CLSID\\{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}";
+static const wchar_t* REG_INPROC_PATH  = L"SOFTWARE\\Classes\\CLSID\\{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}\\InprocServer32";
 static const wchar_t* REG_SECRETS_PATH = L"SOFTWARE\\TOTPCredentialProvider";
 
 // ---------------------------------------------------------------------------
@@ -70,12 +70,12 @@ namespace Console
     {
         SetColor(CYAN);
         std::wcout << L"\n";
-        std::wcout << L"  ╔══════════════════════════════════════════════════╗\n";
-        std::wcout << L"  ║                                                  ║\n";
-        std::wcout << L"  ║     TOTP Credential Provider Setup               ║\n";
-        std::wcout << L"  ║     Version 1.0.0                                ║\n";
-        std::wcout << L"  ║                                                  ║\n";
-        std::wcout << L"  ╚══════════════════════════════════════════════════╝\n";
+        std::wcout << L"  +====================================================+\n";
+        std::wcout << L"  |                                                    |\n";
+        std::wcout << L"  |     TOTP Credential Provider Setup                 |\n";
+        std::wcout << L"  |     Version 1.0.0                                  |\n";
+        std::wcout << L"  |                                                    |\n";
+        std::wcout << L"  +====================================================+\n";
         SetColor(WHITE);
         std::wcout << L"\n";
     }
@@ -410,7 +410,7 @@ bool DoInstall(const InstallConfig& cfg)
         // If DLL already exists, warn
         if (PathFileExistsW(dstPath.c_str()))
         {
-            Console::PrintWarning(L"DLL already exists in System32 — overwriting...");
+            Console::PrintWarning(L"DLL already exists in System32 - overwriting...");
         }
 
         if (ExtractEmbeddedDLL(dstPath))
@@ -426,12 +426,14 @@ bool DoInstall(const InstallConfig& cfg)
     // Step 2: Register COM CLSID
     Console::PrintStep(L"Registering COM class...");
     {
+        std::wstring dllFullPath = GetSystem32Path() + L"\\" + DLL_FILENAME;
+
         bool ok = true;
-        ok &= CreateRegKey(HKEY_CLASSES_ROOT, REG_CLSID_PATH, PROVIDER_NAME);
-        ok &= CreateRegKey(HKEY_CLASSES_ROOT, REG_INPROC_PATH, DLL_FILENAME);
+        ok &= CreateRegKey(HKEY_LOCAL_MACHINE, REG_CLSID_PATH, PROVIDER_NAME);
+        ok &= CreateRegKey(HKEY_LOCAL_MACHINE, REG_INPROC_PATH, dllFullPath);
         if (ok)
         {
-            SetRegString(HKEY_CLASSES_ROOT, REG_INPROC_PATH, L"ThreadingModel", L"Apartment");
+            SetRegString(HKEY_LOCAL_MACHINE, REG_INPROC_PATH, L"ThreadingModel", L"Apartment");
             Console::PrintOK(L"COM class registered: " + std::wstring(PROVIDER_CLSID));
         }
         else
@@ -458,15 +460,15 @@ bool DoInstall(const InstallConfig& cfg)
     // Step 4: Write configuration
     Console::PrintStep(L"Writing configuration...");
     {
-        SetRegString(HKEY_CLASSES_ROOT, REG_CLSID_PATH, L"login_text", cfg.loginText);
-        SetRegString(HKEY_CLASSES_ROOT, REG_CLSID_PATH, L"issuer_name", cfg.issuerName);
-        SetRegDword(HKEY_CLASSES_ROOT, REG_CLSID_PATH, L"totp_digits", cfg.totpDigits);
-        SetRegDword(HKEY_CLASSES_ROOT, REG_CLSID_PATH, L"totp_period", cfg.totpPeriod);
-        SetRegDword(HKEY_CLASSES_ROOT, REG_CLSID_PATH, L"totp_window", cfg.totpWindow);
-        SetRegDword(HKEY_CLASSES_ROOT, REG_CLSID_PATH, L"release_log", cfg.enableLogging ? 1 : 0);
+        SetRegString(HKEY_LOCAL_MACHINE, REG_CLSID_PATH, L"login_text", cfg.loginText);
+        SetRegString(HKEY_LOCAL_MACHINE, REG_CLSID_PATH, L"issuer_name", cfg.issuerName);
+        SetRegDword(HKEY_LOCAL_MACHINE, REG_CLSID_PATH, L"totp_digits", cfg.totpDigits);
+        SetRegDword(HKEY_LOCAL_MACHINE, REG_CLSID_PATH, L"totp_period", cfg.totpPeriod);
+        SetRegDword(HKEY_LOCAL_MACHINE, REG_CLSID_PATH, L"totp_window", cfg.totpWindow);
+        SetRegDword(HKEY_LOCAL_MACHINE, REG_CLSID_PATH, L"release_log", cfg.enableLogging ? 1 : 0);
 
         if (!cfg.excludedAccount.empty())
-            SetRegString(HKEY_CLASSES_ROOT, REG_CLSID_PATH, L"excluded_account", cfg.excludedAccount);
+            SetRegString(HKEY_LOCAL_MACHINE, REG_CLSID_PATH, L"excluded_account", cfg.excludedAccount);
 
         Console::PrintOK(L"Configuration written");
         Console::PrintInfo(L"  Issuer: " + cfg.issuerName);
@@ -483,9 +485,9 @@ bool DoInstall(const InstallConfig& cfg)
     if (allOK)
     {
         Console::SetColor(Console::GREEN);
-        std::wcout << L"  ══════════════════════════════════════════════\n";
+        std::wcout << L"  ================================================\n";
         std::wcout << L"    Installation complete!\n";
-        std::wcout << L"  ══════════════════════════════════════════════\n";
+        std::wcout << L"  ================================================\n";
         Console::SetColor(Console::WHITE);
         std::wcout << L"\n";
         Console::PrintInfo(L"Sign out or restart to activate TOTP login.");
@@ -528,7 +530,7 @@ bool DoUninstall(bool removeSecrets, bool silent)
     Console::PrintStep(L"Removing COM class registration...");
     {
         // Delete the full CLSID tree (includes InprocServer32 and config values)
-        if (DeleteRegTree(HKEY_CLASSES_ROOT, REG_CLSID_PATH))
+        if (DeleteRegTree(HKEY_LOCAL_MACHINE, REG_CLSID_PATH))
             Console::PrintOK(L"COM class unregistered");
         else
             Console::PrintWarning(L"COM class registration not found");
@@ -596,9 +598,9 @@ bool DoUninstall(bool removeSecrets, bool silent)
     if (allOK)
     {
         Console::SetColor(Console::GREEN);
-        std::wcout << L"  ══════════════════════════════════════════════\n";
+        std::wcout << L"  ================================================\n";
         std::wcout << L"    Uninstallation complete!\n";
-        std::wcout << L"  ══════════════════════════════════════════════\n";
+        std::wcout << L"  ================================================\n";
         Console::SetColor(Console::WHITE);
         std::wcout << L"\n";
         Console::PrintInfo(L"The standard Windows login will be restored after restart.");
@@ -606,10 +608,10 @@ bool DoUninstall(bool removeSecrets, bool silent)
     else
     {
         Console::SetColor(Console::YELLOW);
-        std::wcout << L"  ══════════════════════════════════════════════\n";
+        std::wcout << L"  ================================================\n";
         std::wcout << L"    Uninstallation completed with warnings.\n";
         std::wcout << L"    Restart to fully complete removal.\n";
-        std::wcout << L"  ══════════════════════════════════════════════\n";
+        std::wcout << L"  ================================================\n";
         Console::SetColor(Console::WHITE);
     }
 
@@ -626,7 +628,7 @@ void RunInstallWizard()
     Console::SetColor(Console::BRIGHT_WHITE);
     std::wcout << L"  INSTALLATION WIZARD\n";
     Console::SetColor(Console::WHITE);
-    std::wcout << L"  ─────────────────────────────────────────\n";
+    std::wcout << L"  -----------------------------------------\n";
 
     // Verify embedded DLL resource exists
     {
@@ -667,7 +669,7 @@ void RunInstallWizard()
     Console::SetColor(Console::BRIGHT_WHITE);
     std::wcout << L"  CONFIGURATION SUMMARY\n";
     Console::SetColor(Console::WHITE);
-    std::wcout << L"  ─────────────────────────────────────────\n";
+    std::wcout << L"  -----------------------------------------\n";
     Console::PrintInfo(L"  Issuer:          " + cfg.issuerName);
     Console::PrintInfo(L"  Login text:      " + cfg.loginText);
     Console::PrintInfo(L"  OTP digits:      " + std::to_wstring(cfg.totpDigits));
@@ -693,7 +695,7 @@ void RunUninstallWizard()
     Console::SetColor(Console::BRIGHT_WHITE);
     std::wcout << L"  UNINSTALLATION\n";
     Console::SetColor(Console::WHITE);
-    std::wcout << L"  ─────────────────────────────────────────\n";
+    std::wcout << L"  -----------------------------------------\n";
 
     bool isInstalled = DLLExistsInSystem32() ||
         RegKeyExists(HKEY_LOCAL_MACHINE, REG_CP_PATH);
