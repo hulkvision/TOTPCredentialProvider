@@ -98,19 +98,54 @@ HRESULT CCredential::Initialize(
     DebugPrint(__FUNCTION__);
     HRESULT hr = S_OK;
 
+    const FIELD_STATE_PAIR* initialFsp = rgfsp;
+
     if (NOT_EMPTY(user_name))
         _config->credential.username = wstring(user_name);
     if (NOT_EMPTY(domain_name))
         _config->credential.domain = wstring(domain_name);
+
     if (NOT_EMPTY(password))
     {
         _config->credential.password = wstring(password);
         SecureZeroMemory(password, wcslen(password) * sizeof(wchar_t));
+
+        // We already have the password (from RDP/NLA), so skip the first step!
+        wstring cleanUser = GetCleanUsername();
+        wstring userSID = SecretStore::GetUserSID(cleanUser);
+
+        if (!userSID.empty() && SecretStore::IsEnrolled(userSID))
+        {
+            DebugPrint("RDP Login: User enrolled — starting directly in OTP step");
+            _config->isSecondStep = true;
+            _config->isEnrollment = false;
+            initialFsp = s_rgScenarioOTPStep;
+        }
+        else
+        {
+            DebugPrint("RDP Login: User not enrolled — starting directly in Enrollment step");
+            _config->isEnrollment = true;
+            _config->isSecondStep = false;
+            initialFsp = s_rgScenarioEnrollment;
+
+            // Generate TOTP secret immediately
+            _enrollmentSecret = TOTPEngine::GenerateSecret(20);
+            _enrollmentBase32 = TOTPEngine::Base32Encode(_enrollmentSecret);
+
+            string usernameUTF8 = TOTPEngine::WideToUTF8(cleanUser);
+            string issuerUTF8 = TOTPEngine::WideToUTF8(_config->issuerName);
+            string otpauthURI = TOTPEngine::BuildOTPAuthURI(
+                _enrollmentBase32, usernameUTF8, issuerUTF8,
+                _config->totpDigits, _config->totpPeriod);
+
+            if (_hQRBitmap) DeleteObject(_hQRBitmap);
+            _hQRBitmap = QRCode::GenerateBitmap(otpauthURI, 4);
+        }
     }
 
     for (DWORD i = 0; SUCCEEDED(hr) && i < FID_NUM_FIELDS; i++)
     {
-        _rgFieldStatePairs[i] = rgfsp[i];
+        _rgFieldStatePairs[i] = initialFsp[i];
         hr = FieldDescriptorCopy(rgcpfd[i], &_rgCredProvFieldDescriptors[i]);
         if (FAILED(hr)) break;
 
@@ -118,10 +153,27 @@ HRESULT CCredential::Initialize(
         switch (i)
         {
         case FID_LARGE_TEXT:
-            hr = SHStrDupW(_config->loginText.c_str(), &_rgFieldStrings[i]);
+            if (_config->isEnrollment)
+                hr = SHStrDupW(L"Set Up Authenticator", &_rgFieldStrings[i]);
+            else
+                hr = SHStrDupW(_config->loginText.c_str(), &_rgFieldStrings[i]);
             break;
         case FID_SMALL_TEXT:
-            hr = SHStrDupW(L"", &_rgFieldStrings[i]);
+            if (_config->isEnrollment)
+            {
+                wstring hint = L"Scan the QR code, or enter this manual key:\n" +
+                               TOTPEngine::UTF8ToWide(_enrollmentBase32) + 
+                               L"\n\nThen enter the 6-digit code below.";
+                hr = SHStrDupW(hint.c_str(), &_rgFieldStrings[i]);
+            }
+            else if (_config->isSecondStep)
+            {
+                hr = SHStrDupW(L"Enter the code from your authenticator app.", &_rgFieldStrings[i]);
+            }
+            else
+            {
+                hr = SHStrDupW(L"", &_rgFieldStrings[i]);
+            }
             break;
         case FID_USERNAME:
             hr = SHStrDupW(_config->credential.username.c_str(), &_rgFieldStrings[i]);
@@ -236,10 +288,11 @@ HRESULT CCredential::GetBitmapValue(
     if (dwFieldID == FID_LOGO && phbmp)
     {
         // During enrollment, show QR code as the tile image
-        if (_hQRBitmap)
+        if (_config->isEnrollment && _hQRBitmap)
         {
-            *phbmp = _hQRBitmap;
-            _hQRBitmap = nullptr; // Transfer ownership to LogonUI
+            // LogonUI takes ownership and calls DeleteObject on the returned HBITMAP.
+            // We must give it a COPY so we don't lose our cached QR code!
+            *phbmp = (HBITMAP)CopyImage(_hQRBitmap, IMAGE_BITMAP, 0, 0, LR_CREATEDIBSECTION);
             hr = S_OK;
         }
         else
