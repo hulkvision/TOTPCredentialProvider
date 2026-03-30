@@ -288,12 +288,19 @@ HRESULT CCredential::GetBitmapValue(
     if (dwFieldID == FID_LOGO && phbmp)
     {
         // During enrollment, show QR code as the tile image
-        if (_config->isEnrollment && _hQRBitmap)
+        if (_config->isEnrollment && !_enrollmentBase32.empty())
         {
-            // LogonUI takes ownership and calls DeleteObject on the returned HBITMAP.
-            // We must give it a COPY so we don't lose our cached QR code!
-            *phbmp = (HBITMAP)CopyImage(_hQRBitmap, IMAGE_BITMAP, 0, 0, LR_CREATEDIBSECTION);
-            hr = S_OK;
+            wstring cleanUser = GetCleanUsername();
+            string usernameUTF8 = TOTPEngine::WideToUTF8(cleanUser);
+            string issuerUTF8 = TOTPEngine::WideToUTF8(_config->issuerName);
+            string otpauthURI = TOTPEngine::BuildOTPAuthURI(
+                _enrollmentBase32, usernameUTF8, issuerUTF8,
+                _config->totpDigits, _config->totpPeriod);
+
+            // Generate a fresh 32-bit ARGB DIB directly for LogonUI.
+            // CopyImage on the cached _hQRBitmap previously stripped the 32-bit format!
+            *phbmp = QRCode::GenerateBitmap(otpauthURI, 4);
+            if (*phbmp) hr = S_OK;
         }
         else
         {
