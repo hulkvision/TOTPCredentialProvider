@@ -621,15 +621,28 @@ HBITMAP QRCode::CreateBitmapFromMatrix(
     const std::vector<std::vector<bool>>& matrix, int scale)
 {
     int qrSize = static_cast<int>(matrix.size());
-    int quietZone = 4; // 4-module quiet zone around QR
+    int quietZone = 2; // Reduce to 2-module quiet zone to allow larger QR codes
     int totalModules = qrSize + quietZone * 2;
-    int bmpSize = totalModules * scale;
+    
+    // LogonUI expects EXACTLY a 128x128 texture because it fails to account for
+    // DIB stride mismatches, causing severe diagonal rendering shear!
+    int finalSize = 128;
+    
+    // Calculate the integer scale that fits entirely within 128x128
+    int actualScale = finalSize / totalModules;
+    if (actualScale < 1) actualScale = 1; // Fallback, though it shouldn't happen unless data is huge
+    
+    int qrPixelSize = totalModules * actualScale;
+    
+    // Center it inside the 128x128 box
+    int offsetX = (finalSize - qrPixelSize) / 2;
+    int offsetY = (finalSize - qrPixelSize) / 2;
 
-    // Create a DIB section
+    // Create a 128x128 DIB section
     BITMAPINFO bmi = {};
     bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-    bmi.bmiHeader.biWidth = bmpSize;
-    bmi.bmiHeader.biHeight = -bmpSize; // Top-down
+    bmi.bmiHeader.biWidth = finalSize;
+    bmi.bmiHeader.biHeight = -finalSize; // Top-down
     bmi.bmiHeader.biPlanes = 1;
     bmi.bmiHeader.biBitCount = 32;
     bmi.bmiHeader.biCompression = BI_RGB;
@@ -641,12 +654,12 @@ HBITMAP QRCode::CreateBitmapFromMatrix(
 
     if (!hbmp || !bits) return nullptr;
 
-    // Calculate stride for 32-bit ARGB
-    int stride = bmpSize * 4;
+    // 32-bit ARGB. Stride is perfectly 128 * 4 = 512 bytes
+    int stride = finalSize * 4;
     uint8_t* pixels = static_cast<uint8_t*>(bits);
 
-    // Fill with white (0xFFFFFFFF = Opaque White in ARGB)
-    memset(pixels, 0xFF, stride * bmpSize);
+    // Fill entire 128x128 background with Opaque White (0xFFFFFFFF)
+    memset(pixels, 0xFF, stride * finalSize);
 
     // Draw QR modules (black pixels)
     for (int r = 0; r < qrSize; r++)
@@ -655,16 +668,18 @@ HBITMAP QRCode::CreateBitmapFromMatrix(
         {
             if (!matrix[r][c]) continue; // White module
 
-            int px = (c + quietZone) * scale;
-            int py = (r + quietZone) * scale;
+            // Add quiet zone offset and center it
+            int px = offsetX + (c + quietZone) * actualScale;
+            int py = offsetY + (r + quietZone) * actualScale;
 
-            for (int sy = 0; sy < scale; sy++)
+            for (int sy = 0; sy < actualScale; sy++)
             {
-                for (int sx = 0; sx < scale; sx++)
+                for (int sx = 0; sx < actualScale; sx++)
                 {
                     int x = px + sx;
                     int y = py + sy;
-                    if (x < bmpSize && y < bmpSize)
+                    
+                    if (x >= 0 && x < finalSize && y >= 0 && y < finalSize)
                     {
                         int offset = y * stride + x * 4;
                         pixels[offset + 0] = 0;   // Blue
