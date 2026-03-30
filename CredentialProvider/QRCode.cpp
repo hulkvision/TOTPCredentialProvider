@@ -624,73 +624,50 @@ HBITMAP QRCode::CreateBitmapFromMatrix(
     int quietZone = 2; // Reduce to 2-module quiet zone to allow larger QR codes
     int totalModules = qrSize + quietZone * 2;
     
-    // LogonUI expects EXACTLY a 128x128 texture because it fails to account for
-    // DIB stride mismatches, causing severe diagonal rendering shear!
+    // LogonUI expects EXACTLY a 128x128 texture
     int finalSize = 128;
     
-    // Calculate the integer scale that fits entirely within 128x128
     int actualScale = finalSize / totalModules;
-    if (actualScale < 1) actualScale = 1; // Fallback, though it shouldn't happen unless data is huge
+    if (actualScale < 1) actualScale = 1;
     
     int qrPixelSize = totalModules * actualScale;
-    
-    // Center it inside the 128x128 box
     int offsetX = (finalSize - qrPixelSize) / 2;
     int offsetY = (finalSize - qrPixelSize) / 2;
 
-    // Create a 128x128 DIB section
-    BITMAPINFO bmi = {};
-    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-    bmi.bmiHeader.biWidth = finalSize;
-    bmi.bmiHeader.biHeight = -finalSize; // Top-down
-    bmi.bmiHeader.biPlanes = 1;
-    bmi.bmiHeader.biBitCount = 32;
-    bmi.bmiHeader.biCompression = BI_RGB;
+    HDC hScreenDC = GetDC(nullptr);
+    HDC hMemDC = CreateCompatibleDC(hScreenDC);
+    HBITMAP hbmp = CreateCompatibleBitmap(hScreenDC, finalSize, finalSize);
+    HBITMAP hOldBmp = (HBITMAP)SelectObject(hMemDC, hbmp);
 
-    void* bits = nullptr;
-    HDC hdc = GetDC(nullptr);
-    HBITMAP hbmp = CreateDIBSection(hdc, &bmi, DIB_RGB_COLORS, &bits, nullptr, 0);
-    ReleaseDC(nullptr, hdc);
-
-    if (!hbmp || !bits) return nullptr;
-
-    // 32-bit ARGB. Stride is perfectly 128 * 4 = 512 bytes
-    int stride = finalSize * 4;
-    uint8_t* pixels = static_cast<uint8_t*>(bits);
-
-    // Fill entire 128x128 background with Opaque White (0xFFFFFFFF)
-    memset(pixels, 0xFF, stride * finalSize);
-
-    // Draw QR modules (black pixels)
+    // Completely fill background with white
+    RECT bgRect = { 0, 0, finalSize, finalSize };
+    HBRUSH hBrushWhite = CreateSolidBrush(RGB(255, 255, 255));
+    FillRect(hMemDC, &bgRect, hBrushWhite);
+    
+    // Draw QR code modules
+    HBRUSH hBrushBlack = CreateSolidBrush(RGB(0, 0, 0));
     for (int r = 0; r < qrSize; r++)
     {
         for (int c = 0; c < qrSize; c++)
         {
-            if (!matrix[r][c]) continue; // White module
+            if (!matrix[r][c]) continue; // Skip white modules
 
-            // Add quiet zone offset and center it
             int px = offsetX + (c + quietZone) * actualScale;
             int py = offsetY + (r + quietZone) * actualScale;
 
-            for (int sy = 0; sy < actualScale; sy++)
-            {
-                for (int sx = 0; sx < actualScale; sx++)
-                {
-                    int x = px + sx;
-                    int y = py + sy;
-                    
-                    if (x >= 0 && x < finalSize && y >= 0 && y < finalSize)
-                    {
-                        int offset = y * stride + x * 4;
-                        pixels[offset + 0] = 0;   // Blue
-                        pixels[offset + 1] = 0;   // Green
-                        pixels[offset + 2] = 0;   // Red
-                        pixels[offset + 3] = 255; // Alpha (Opaque)
-                    }
-                }
-            }
+            RECT moduleRect = { px, py, px + actualScale, py + actualScale };
+            FillRect(hMemDC, &moduleRect, hBrushBlack);
         }
     }
+
+    // Cleanup GDI objects
+    DeleteObject(hBrushWhite);
+    DeleteObject(hBrushBlack);
+    SelectObject(hMemDC, hOldBmp);
+    DeleteDC(hMemDC);
+    ReleaseDC(nullptr, hScreenDC);
+
+    return hbmp;
 
     return hbmp;
 }
