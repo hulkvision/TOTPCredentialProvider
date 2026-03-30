@@ -631,7 +631,7 @@ HBITMAP QRCode::CreateBitmapFromMatrix(
     bmi.bmiHeader.biWidth = bmpSize;
     bmi.bmiHeader.biHeight = -bmpSize; // Top-down
     bmi.bmiHeader.biPlanes = 1;
-    bmi.bmiHeader.biBitCount = 24;
+    bmi.bmiHeader.biBitCount = 32;
     bmi.bmiHeader.biCompression = BI_RGB;
 
     void* bits = nullptr;
@@ -641,11 +641,11 @@ HBITMAP QRCode::CreateBitmapFromMatrix(
 
     if (!hbmp || !bits) return nullptr;
 
-    // Calculate stride (each row aligned to 4 bytes)
-    int stride = ((bmpSize * 3 + 3) / 4) * 4;
+    // Calculate stride for 32-bit ARGB
+    int stride = bmpSize * 4;
     uint8_t* pixels = static_cast<uint8_t*>(bits);
 
-    // Fill with white
+    // Fill with white (0xFFFFFFFF = Opaque White in ARGB)
     memset(pixels, 0xFF, stride * bmpSize);
 
     // Draw QR modules (black pixels)
@@ -666,10 +666,11 @@ HBITMAP QRCode::CreateBitmapFromMatrix(
                     int y = py + sy;
                     if (x < bmpSize && y < bmpSize)
                     {
-                        int offset = y * stride + x * 3;
-                        pixels[offset + 0] = 0; // Blue
-                        pixels[offset + 1] = 0; // Green
-                        pixels[offset + 2] = 0; // Red
+                        int offset = y * stride + x * 4;
+                        pixels[offset + 0] = 0;   // Blue
+                        pixels[offset + 1] = 0;   // Green
+                        pixels[offset + 2] = 0;   // Red
+                        pixels[offset + 3] = 255; // Alpha (Opaque)
                     }
                 }
             }

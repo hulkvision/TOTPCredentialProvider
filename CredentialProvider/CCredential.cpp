@@ -470,14 +470,12 @@ HRESULT CCredential::Connect(__in IQueryContinueWithStatus* pqcws)
     wstring username = _config->credential.username;
 
     // Check for excluded account
-    if (!_config->excludedAccount.empty())
+    if (_config->IsAccountExcluded(username, _config->credential.domain))
     {
-        wstring toCompare = _config->credential.domain.empty()
-            ? username
-            : _config->credential.domain + L"\\" + username;
-
-        // Case-insensitive compare
-        wstring excludedUpper = _config->excludedAccount;
+        DebugPrint("Excluded account — skipping TOTP");
+        _authSuccess = true;
+        return S_OK;
+    }
         wstring compareUpper = toCompare;
         auto toUpper = [](wchar_t c) { return static_cast<wchar_t>(towupper(c)); };
         transform(excludedUpper.begin(), excludedUpper.end(), excludedUpper.begin(), toUpper);

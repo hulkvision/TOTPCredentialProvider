@@ -6,6 +6,7 @@
 
 #include "Configuration.h"
 #include "Logger.h"
+#include <algorithm>
 
 using namespace std;
 
@@ -61,6 +62,24 @@ void Configuration::PrintConfiguration()
     DebugPrint(L"Excluded account: " + excludedAccount);
     DebugPrint(L"Release log: " + wstring(releaseLog ? L"true" : L"false"));
     DebugPrint("-----------------------------");
+}
+
+bool Configuration::IsAccountExcluded(const std::wstring& username, const std::wstring& domain) const
+{
+    if (excludedAccount.empty()) return false;
+
+    std::wstring toCompare = domain.empty() ? username : domain + L"\\" + username;
+    
+    std::wstring excludedUpper = excludedAccount;
+    std::wstring compareUpper = toCompare;
+    std::wstring userUpper = username;
+
+    auto toUpper = [](wchar_t c) { return static_cast<wchar_t>(towupper(c)); };
+    std::transform(excludedUpper.begin(), excludedUpper.end(), excludedUpper.begin(), toUpper);
+    std::transform(compareUpper.begin(), compareUpper.end(), compareUpper.begin(), toUpper);
+    std::transform(userUpper.begin(), userUpper.end(), userUpper.begin(), toUpper);
+
+    return (compareUpper == excludedUpper || userUpper == excludedUpper);
 }
 
 // ---------------------------------------------------------------------------

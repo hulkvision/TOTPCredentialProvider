@@ -248,8 +248,26 @@ HRESULT CProvider::GetCredentialCount(
         _SerializationAvailable(SAF_PASSWORD))
     {
         *pdwDefault = 0;
-        // Don't auto-logon; we still need OTP step
-        *pbAutoLogonWithDefault = FALSE;
+        
+        PWSTR serializedUser = nullptr, serializedDomain = nullptr;
+        _GetSerializedCredentials(&serializedUser, nullptr, &serializedDomain);
+        
+        wstring username = serializedUser ? serializedUser : L"";
+        wstring domain = serializedDomain ? serializedDomain : L"";
+        
+        if (serializedUser) LocalFree(serializedUser);
+        if (serializedDomain) LocalFree(serializedDomain);
+
+        if (_config->IsAccountExcluded(username, domain))
+        {
+            DebugPrint("RDP AutoLogon: Excluded account — bypassing TOTP Screen");
+            *pbAutoLogonWithDefault = TRUE;
+        }
+        else
+        {
+            // Don't auto-logon; we still need OTP step
+            *pbAutoLogonWithDefault = FALSE;
+        }
     }
 
     return S_OK;

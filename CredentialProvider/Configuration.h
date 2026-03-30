@@ -40,6 +40,8 @@ public:
     bool   releaseLog           = false;
     bool   noDefault            = false;
 
+    bool IsAccountExcluded(const std::wstring& username, const std::wstring& domain) const;
+
     // --- Runtime state (not from registry) ---
     bool   isSecondStep         = false;
     bool   isEnrollment         = false;
