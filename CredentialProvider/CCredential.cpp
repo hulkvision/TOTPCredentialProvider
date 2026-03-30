@@ -476,18 +476,6 @@ HRESULT CCredential::Connect(__in IQueryContinueWithStatus* pqcws)
         _authSuccess = true;
         return S_OK;
     }
-        wstring compareUpper = toCompare;
-        auto toUpper = [](wchar_t c) { return static_cast<wchar_t>(towupper(c)); };
-        transform(excludedUpper.begin(), excludedUpper.end(), excludedUpper.begin(), toUpper);
-        transform(compareUpper.begin(), compareUpper.end(), compareUpper.begin(), toUpper);
-
-        if (compareUpper == excludedUpper)
-        {
-            DebugPrint("Excluded account — skipping TOTP");
-            _authSuccess = true;
-            return S_OK;
-        }
-    }
 
     // --- ENROLLMENT or OTP STEP (second press of Submit) ---
     if (_config->isSecondStep || _config->isEnrollment)
