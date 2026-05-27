@@ -22,7 +22,7 @@ public:
     // Generate a QR code bitmap from a text string (e.g., otpauth:// URI)
     // Returns an HBITMAP that can be used in GetBitmapValue.
     // The caller is responsible for deleting the bitmap with DeleteObject.
-    static HBITMAP GenerateBitmap(const std::string& text, int scale = 4);
+    static HBITMAP GenerateBitmap(const std::string& text, int scale = 4, int finalSize = 128);
 
     // Generate the QR code matrix (true = black module)
     static std::vector<std::vector<bool>> GenerateMatrix(const std::string& text);
@@ -58,6 +58,5 @@ private:
     static int EvaluatePenalty(const std::vector<std::vector<bool>>& matrix, int size);
 
     // Bitmap creation
-    static HBITMAP CreateBitmapFromMatrix(
-        const std::vector<std::vector<bool>>& matrix, int scale);
+    static HBITMAP CreateBitmapFromMatrix(const std::vector<std::vector<bool>>& matrix, int finalSize);
 };

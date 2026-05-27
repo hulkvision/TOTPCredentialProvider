@@ -35,12 +35,52 @@
 #include <vector>
 #include <iostream>
 #include <io.h>
+#include <io.h>
 #include <fcntl.h>
+#define SECURITY_WIN32
+#include <lm.h>
+#include <sddl.h>
 #include "setup_resource.h"
+#include "../CredentialProvider/SecretStore.h"
+#include "../CredentialProvider/TOTPEngine.h"
+#include "../CredentialProvider/QRCode.h"
 
+#pragma comment(lib, "Netapi32.lib")
 #pragma comment(lib, "shlwapi.lib")
 #pragma comment(lib, "advapi32.lib")
 #pragma comment(lib, "shell32.lib")
+
+std::vector<std::wstring> GetLocalUsers()
+{
+    DWORD dwLevel = 1;
+    DWORD dwPrefMaxLen = MAX_PREFERRED_LENGTH;
+    DWORD dwEntriesRead = 0;
+    DWORD dwTotalEntries = 0;
+    DWORD dwResumeHandle = 0;
+    NET_API_STATUS nStatus;
+    USER_INFO_1* pBuf = nullptr;
+    std::vector<std::wstring> localUsers;
+
+    do {
+        nStatus = NetUserEnum(nullptr, dwLevel, FILTER_NORMAL_ACCOUNT,
+            (LPBYTE*)&pBuf, dwPrefMaxLen, &dwEntriesRead,
+            &dwTotalEntries, &dwResumeHandle);
+        
+        if ((nStatus == NERR_Success) || (nStatus == ERROR_MORE_DATA)) {
+            if (pBuf != nullptr) {
+                for (DWORD i = 0; i < dwEntriesRead; i++) {
+                    localUsers.push_back(pBuf[i].usri1_name);
+                }
+            }
+        }
+        if (pBuf != nullptr) {
+            NetApiBufferFree(pBuf);
+            pBuf = nullptr;
+        }
+    } while (nStatus == ERROR_MORE_DATA);
+
+    return localUsers;
+}
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -522,8 +562,7 @@ bool DoInstall(const InstallConfig& cfg)
         std::wcout << L"  ================================================\n";
         Console::SetColor(Console::WHITE);
         std::wcout << L"\n";
-        Console::PrintInfo(L"Sign out or restart to activate TOTP login.");
-        Console::PrintInfo(L"On first login, scan the QR code with your authenticator app.");
+        Console::PrintInfo(L"    Sign out or restart to activate TOTP login.");
         std::wcout << L"\n";
         Console::PrintWarning(L"IMPORTANT: Keep this setup program available.");
         Console::PrintInfo(L"Run 'TOTPSetup.exe /uninstall' to remove the credential provider.");
@@ -707,7 +746,11 @@ void RunInstallWizard()
     // Excluded account
     Console::PrintInfo(L"");
     Console::PrintInfo(L"You can exclude one account from TOTP (e.g., a recovery admin account).");
-    cfg.excludedAccount = Console::Prompt(L"Excluded account (leave blank for none)", L"");
+    std::vector<std::wstring> localUsers = GetLocalUsers();
+    std::vector<std::wstring> excludeOptions = { L"None" };
+    for (const auto& u : localUsers) excludeOptions.push_back(u);
+    int excludeChoice = Console::PromptChoice(L"Select excluded account:", excludeOptions, 0);
+    cfg.excludedAccount = (excludeChoice == 0) ? L"" : localUsers[excludeChoice - 1];
 
     // TOTP settings
     int digitChoice = Console::PromptChoice(L"OTP length:", { L"6 digits (recommended)", L"8 digits" }, 0);
@@ -741,7 +784,127 @@ void RunInstallWizard()
     }
 
     std::wcout << L"\n";
-    DoInstall(cfg);
+    if (!DoInstall(cfg)) return;
+
+    // Enrollment Phase
+    if (Console::PromptYesNo(L"Do you want to enroll users in TOTP now?", true))
+    {
+        std::vector<std::wstring> options;
+        options.push_back(L"All Users (System-wide enrollment)");
+        
+        std::vector<std::wstring> enrollUsers = GetLocalUsers();
+        for (const auto& name : enrollUsers) {
+            options.push_back(L"User: " + name);
+        }
+
+        int userChoice = Console::PromptChoice(L"Select user(s) to enroll:", options, 0);
+
+        std::vector<std::wstring> selectedUsers;
+        if (userChoice == 0) {
+            selectedUsers = enrollUsers;
+        } else {
+            selectedUsers.push_back(enrollUsers[userChoice - 1]);
+        }
+
+        // Check for existing enrollments
+        std::vector<std::wstring> finalUsers;
+        for (const auto& u : selectedUsers) {
+            std::wstring sid = SecretStore::GetUserSID(u);
+            if (!sid.empty() && SecretStore::IsEnrolled(sid)) {
+                if (!Console::PromptYesNo(L"User " + u + L" is already enrolled. Overwrite existing TOTP secret?", false)) {
+                    continue;
+                }
+            }
+            finalUsers.push_back(u);
+        }
+
+        if (finalUsers.empty()) {
+            Console::PrintInfo(L"No users selected for new enrollment. Skipping QR generation.");
+            return;
+        }
+
+        // Generate one secret to share among selected users
+        std::vector<uint8_t> secret = TOTPEngine::GenerateSecret(20);
+        std::string base32Secret = TOTPEngine::Base32Encode(secret);
+
+        std::string usernameUTF8 = (userChoice == 0) ? "AllUsers" : TOTPEngine::WideToUTF8(finalUsers[0]);
+        std::string issuerUTF8 = TOTPEngine::WideToUTF8(cfg.issuerName);
+
+        std::string otpauthURI = TOTPEngine::BuildOTPAuthURI(
+            base32Secret, usernameUTF8, issuerUTF8,
+            cfg.totpDigits, cfg.totpPeriod);
+
+        // Store for all selected
+        for (const auto& u : finalUsers) {
+            std::wstring sid = SecretStore::GetUserSID(u);
+            if (!sid.empty()) {
+                SecretStore::StoreSecret(sid, secret);
+                SecretStore::MarkEnrolled(sid);
+                Console::PrintOK(L"Enrolled user: " + u);
+            }
+        }
+
+        // Show QR Code GUI
+        HBITMAP hQR = QRCode::GenerateBitmap(otpauthURI, 4, 300); // 300x300 so it's readable
+        if (hQR) {
+            WNDCLASSW wc = {0};
+            wc.lpfnWndProc = [](HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam) -> LRESULT {
+                if (uMsg == WM_CLOSE) {
+                    int result = MessageBoxW(hwnd, L"Have you securely stored the QR code?\nIf you lose it, you will be locked out of the system!", L"Warning", MB_YESNO | MB_ICONWARNING | MB_TOPMOST);
+                    if (result == IDYES) {
+                        DestroyWindow(hwnd);
+                    }
+                    return 0;
+                }
+                if (uMsg == WM_DESTROY) {
+                    PostQuitMessage(0);
+                    return 0;
+                }
+                return DefWindowProcW(hwnd, uMsg, wParam, lParam);
+            };
+            wc.hInstance = GetModuleHandle(nullptr);
+            wc.lpszClassName = L"QRWindowClass";
+            wc.hbrBackground = (HBRUSH)(COLOR_WINDOW+1);
+            RegisterClassW(&wc);
+
+            int width = 400;
+            int height = 450;
+            int screenW = GetSystemMetrics(SM_CXSCREEN);
+            int screenH = GetSystemMetrics(SM_CYSCREEN);
+            
+            HWND hwnd = CreateWindowExW(
+                WS_EX_TOPMOST, L"QRWindowClass", L"Scan TOTP QR Code",
+                WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_VISIBLE,
+                (screenW - width) / 2, (screenH - height) / 2, width, height,
+                nullptr, nullptr, wc.hInstance, nullptr
+            );
+
+            HWND hText = CreateWindowExW(
+                0, L"STATIC", L"Scan the QR code below with your authenticator app.\nClose this window when finished.",
+                WS_CHILD | WS_VISIBLE | SS_CENTER,
+                10, 10, width - 36, 40,
+                hwnd, nullptr, wc.hInstance, nullptr
+            );
+
+            HWND hImage = CreateWindowExW(
+                0, L"STATIC", nullptr,
+                WS_CHILD | WS_VISIBLE | SS_BITMAP | SS_CENTERIMAGE,
+                (width - 300) / 2, 60, 300, 300,
+                hwnd, nullptr, wc.hInstance, nullptr
+            );
+            SendMessage(hImage, STM_SETIMAGE, IMAGE_BITMAP, (LPARAM)hQR);
+
+            MSG msg;
+            while (GetMessage(&msg, nullptr, 0, 0)) {
+                TranslateMessage(&msg);
+                DispatchMessage(&msg);
+            }
+            
+            DeleteObject(hQR);
+        } else {
+            Console::PrintError(L"Failed to generate QR Code bitmap.");
+        }
+    }
 }
 
 void RunUninstallWizard()

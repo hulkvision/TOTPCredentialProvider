@@ -80,21 +80,6 @@ static const FIELD_STATE_PAIR s_rgScenarioOTPStep[] =
     { CPFS_DISPLAY_IN_SELECTED_TILE, CPFIS_NONE    },  // FID_SUBMIT_BUTTON
 };
 
-// ---------------------------------------------------------------------------
-// Scenario: ENROLLMENT — QR code shown as tile + OTP input (first-time setup)
-// The QR code replaces the logo image during enrollment
-// Shows: Logo/QR, Title, SmallText (instructions), OTP, Submit
-// ---------------------------------------------------------------------------
-static const FIELD_STATE_PAIR s_rgScenarioEnrollment[] =
-{
-    { CPFS_DISPLAY_IN_BOTH,          CPFIS_NONE    },  // FID_LOGO (shows QR)
-    { CPFS_DISPLAY_IN_BOTH,          CPFIS_NONE    },  // FID_LARGE_TEXT
-    { CPFS_DISPLAY_IN_SELECTED_TILE, CPFIS_NONE    },  // FID_SMALL_TEXT
-    { CPFS_HIDDEN,                   CPFIS_NONE    },  // FID_USERNAME
-    { CPFS_HIDDEN,                   CPFIS_NONE    },  // FID_LDAP_PASS
-    { CPFS_DISPLAY_IN_SELECTED_TILE, CPFIS_FOCUSED },  // FID_OTP
-    { CPFS_DISPLAY_IN_SELECTED_TILE, CPFIS_NONE    },  // FID_SUBMIT_BUTTON
-};
 
 // ---------------------------------------------------------------------------
 // Field descriptors — type and label for each field
@@ -120,5 +105,4 @@ enum class TOTP_SCENARIO
     LOGON_PASSWORD_FIRST = 1,
     UNLOCK_PASSWORD = 2,
     OTP_STEP = 3,
-    ENROLLMENT = 4,
 };

@@ -17,19 +17,19 @@
 // QR code specification tables
 // ---------------------------------------------------------------------------
 
-// Total data codewords for versions 1-10, EC level M
+// Total codewords (data + EC) for versions 1-10, EC level M
 static const int TOTAL_CODEWORDS[] = {
     0,   // v0 (unused)
-    16,  // v1
-    28,  // v2
-    44,  // v3
-    64,  // v4
-    86,  // v5
-    108, // v6
-    124, // v7
-    154, // v8
-    182, // v9
-    216, // v10
+    26,  // v1
+    44,  // v2
+    70,  // v3
+    100, // v4
+    134, // v5
+    172, // v6
+    196, // v7
+    242, // v8
+    292, // v9
+    346, // v10
 };
 
 // EC codewords per block for versions 1-10, EC level M
@@ -63,17 +63,17 @@ static const int NUM_EC_BLOCKS[] = {
 };
 
 // Alignment pattern positions for versions 2-10
-static const int ALIGNMENT_POSITIONS[][2] = {
-    { 0, 0 },     // v1 (none)
-    { 6, 18 },    // v2
-    { 6, 22 },    // v3
-    { 6, 26 },    // v4
-    { 6, 30 },    // v5
-    { 6, 34 },    // v6
-    { 6, 22 },    // v7 (6, 22, 38)
-    { 6, 24 },    // v8
-    { 6, 26 },    // v9
-    { 6, 28 },    // v10
+static const int ALIGNMENT_POSITIONS[][3] = {
+    { 0, 0, 0 },     // v1 (none)
+    { 6, 18, 0 },    // v2
+    { 6, 22, 0 },    // v3
+    { 6, 26, 0 },    // v4
+    { 6, 30, 0 },    // v5
+    { 6, 34, 0 },    // v6
+    { 6, 22, 38 },   // v7
+    { 6, 24, 42 },   // v8
+    { 6, 26, 46 },   // v9
+    { 6, 28, 50 },   // v10
 };
 
 // GF(256) log/antilog tables for Reed-Solomon
@@ -289,7 +289,7 @@ std::vector<uint8_t> QRCode::CalculateEC(const std::vector<uint8_t>& data, int e
         {
             for (int j = 0; j <= ecCodewords; j++)
             {
-                remainder[i + j] ^= GF256Multiply(gen[j], coef);
+                remainder[i + j] ^= GF256Multiply(gen[ecCodewords - j], coef);
             }
         }
     }
@@ -404,14 +404,38 @@ void QRCode::PlaceFormatInfo(std::vector<std::vector<bool>>& matrix, int size, i
         matrix[8][i] = (encoded >> (14 - bit++)) & 1;
 }
 
-void QRCode::PlaceVersionInfo(std::vector<std::vector<bool>>& /*matrix*/,
-    int /*size*/, int version)
+void QRCode::PlaceVersionInfo(std::vector<std::vector<bool>>& matrix,
+    int size, int version)
 {
     // Version info is only needed for version 7+
-    // We support up to version 10, so implement for v7-10
     if (version < 7) return;
-    // Simplified: skip version info placement for now
-    // (versions 1-6 don't need it, and our QR codes typically fit in v1-6)
+
+    // BCH(18,6) encoding for version information
+    int data = version << 12;
+    int generator = 0x1F25; // x^12 + x^11 + x^10 + x^9 + x^8 + x^5 + x^2 + 1
+
+    int remainder = data;
+    for (int i = 17; i >= 12; i--)
+    {
+        if (remainder & (1 << i))
+            remainder ^= generator << (i - 12);
+    }
+    int encoded = data | remainder;
+
+    // Bottom-left: 3x6 block above finder
+    // Top-right: 6x3 block left of finder
+    int bit = 0;
+    for (int i = 0; i < 6; i++)
+    {
+        for (int j = 0; j < 3; j++)
+        {
+            bool val = (encoded >> bit++) & 1;
+            // Bottom-left
+            matrix[size - 11 + j][i] = val;
+            // Top-right
+            matrix[i][size - 11 + j] = val;
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -578,14 +602,35 @@ std::vector<std::vector<bool>> QRCode::GenerateMatrix(const std::string& text)
     // Alignment patterns (version 2+)
     if (version >= 2)
     {
-        // Simple: place a single alignment pattern
-        int pos = ALIGNMENT_POSITIONS[version - 1][1];
-        if (pos > 0)
+        for (int i = 0; i < 3; i++)
         {
-            // Check it doesn't overlap with finder patterns
-            if (!reserved[pos][pos])
-                PlaceAlignmentPattern(matrix, reserved, pos, pos);
+            int r = ALIGNMENT_POSITIONS[version - 1][i];
+            if (r == 0) continue;
+            
+            for (int j = 0; j < 3; j++)
+            {
+                int c = ALIGNMENT_POSITIONS[version - 1][j];
+                if (c == 0) continue;
+                
+                // Check it doesn't overlap with finder patterns
+                if (!reserved[r][c])
+                    PlaceAlignmentPattern(matrix, reserved, r, c);
+            }
         }
+    }
+
+    // Version info (version 7+)
+    if (version >= 7)
+    {
+        for (int i = 0; i < 6; i++)
+        {
+            for (int j = 0; j < 3; j++)
+            {
+                reserved[size - 11 + j][i] = true;
+                reserved[i][size - 11 + j] = true;
+            }
+        }
+        PlaceVersionInfo(matrix, size, version);
     }
 
     // Place data bits with temporary mask 0
@@ -618,34 +663,49 @@ std::vector<std::vector<bool>> QRCode::GenerateMatrix(const std::string& text)
 // CreateBitmapFromMatrix — Convert QR matrix to Windows HBITMAP
 // ---------------------------------------------------------------------------
 HBITMAP QRCode::CreateBitmapFromMatrix(
-    const std::vector<std::vector<bool>>& matrix, int scale)
+    const std::vector<std::vector<bool>>& matrix, int finalSize)
 {
     int qrSize = static_cast<int>(matrix.size());
     int quietZone = 2; // Reduce to 2-module quiet zone to allow larger QR codes
     int totalModules = qrSize + quietZone * 2;
     
-    // LogonUI expects EXACTLY a 128x128 texture
-    int finalSize = 128;
+    // Windows LogonUI applies a circular mask to the tile logo!
+    // To ensure the QR code corners (finder patterns) aren't cropped,
+    // the max safe square size is finalSize / sqrt(2) ≈ finalSize * 0.707.
+    int maxQrSize = static_cast<int>(finalSize * 0.707f);
     
-    int actualScale = finalSize / totalModules;
+    int actualScale = maxQrSize / totalModules;
     if (actualScale < 1) actualScale = 1;
     
     int qrPixelSize = totalModules * actualScale;
     int offsetX = (finalSize - qrPixelSize) / 2;
     int offsetY = (finalSize - qrPixelSize) / 2;
 
-    HDC hScreenDC = GetDC(nullptr);
-    HDC hMemDC = CreateCompatibleDC(hScreenDC);
-    HBITMAP hbmp = CreateCompatibleBitmap(hScreenDC, finalSize, finalSize);
-    HBITMAP hOldBmp = (HBITMAP)SelectObject(hMemDC, hbmp);
+    BITMAPINFO bmi;
+    ZeroMemory(&bmi, sizeof(BITMAPINFO));
+    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bmi.bmiHeader.biWidth = finalSize;
+    bmi.bmiHeader.biHeight = -finalSize; // Top-down
+    bmi.bmiHeader.biPlanes = 1;
+    bmi.bmiHeader.biBitCount = 32;       // 32-bit ARGB required by LogonUI
+    bmi.bmiHeader.biCompression = BI_RGB;
 
-    // Completely fill background with white
-    RECT bgRect = { 0, 0, finalSize, finalSize };
-    HBRUSH hBrushWhite = CreateSolidBrush(RGB(255, 255, 255));
-    FillRect(hMemDC, &bgRect, hBrushWhite);
+    void* pBits = nullptr;
+    HDC hScreenDC = GetDC(nullptr);
+    HBITMAP hbmp = CreateDIBSection(hScreenDC, &bmi, DIB_RGB_COLORS, &pBits, nullptr, 0);
+    ReleaseDC(nullptr, hScreenDC);
+
+    if (!hbmp || !pBits) return nullptr;
+
+    uint32_t* pixels = static_cast<uint32_t*>(pBits);
+
+    // Completely fill background with white (Alpha 255)
+    for (int i = 0; i < finalSize * finalSize; i++)
+    {
+        pixels[i] = 0xFFFFFFFF; // ARGB White
+    }
     
     // Draw QR code modules
-    HBRUSH hBrushBlack = CreateSolidBrush(RGB(0, 0, 0));
     for (int r = 0; r < qrSize; r++)
     {
         for (int c = 0; c < qrSize; c++)
@@ -655,19 +715,18 @@ HBITMAP QRCode::CreateBitmapFromMatrix(
             int px = offsetX + (c + quietZone) * actualScale;
             int py = offsetY + (r + quietZone) * actualScale;
 
-            RECT moduleRect = { px, py, px + actualScale, py + actualScale };
-            FillRect(hMemDC, &moduleRect, hBrushBlack);
+            for (int y = py; y < py + actualScale; ++y)
+            {
+                for (int x = px; x < px + actualScale; ++x)
+                {
+                    if (y >= 0 && y < finalSize && x >= 0 && x < finalSize)
+                    {
+                        pixels[y * finalSize + x] = 0xFF000000; // ARGB Black
+                    }
+                }
+            }
         }
     }
-
-    // Cleanup GDI objects
-    DeleteObject(hBrushWhite);
-    DeleteObject(hBrushBlack);
-    SelectObject(hMemDC, hOldBmp);
-    DeleteDC(hMemDC);
-    ReleaseDC(nullptr, hScreenDC);
-
-    return hbmp;
 
     return hbmp;
 }
@@ -675,12 +734,10 @@ HBITMAP QRCode::CreateBitmapFromMatrix(
 // ---------------------------------------------------------------------------
 // GenerateBitmap — Public API
 // ---------------------------------------------------------------------------
-HBITMAP QRCode::GenerateBitmap(const std::string& text, int scale)
+HBITMAP QRCode::GenerateBitmap(const std::string& text, int scale, int finalSize)
 {
-    if (text.empty()) return nullptr;
-
     auto matrix = GenerateMatrix(text);
     if (matrix.empty()) return nullptr;
 
-    return CreateBitmapFromMatrix(matrix, scale);
+    return CreateBitmapFromMatrix(matrix, finalSize);
 }

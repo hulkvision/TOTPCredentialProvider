@@ -44,7 +44,6 @@ public:
 
     // --- Runtime state (not from registry) ---
     bool   isSecondStep         = false;
-    bool   isEnrollment         = false;
     bool   doAutoLogon          = false;
     bool   userCanceled         = false;
     bool   clearFields          = true;

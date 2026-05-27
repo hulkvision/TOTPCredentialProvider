@@ -75,13 +75,6 @@ CCredential::~CCredential()
         _hQRBitmap = nullptr;
     }
 
-    // Secure zero enrollment secret
-    if (!_enrollmentSecret.empty())
-    {
-        SecureZeroMemory(_enrollmentSecret.data(), _enrollmentSecret.size());
-        _enrollmentSecret.clear();
-    }
-
     DllRelease();
 }
 
@@ -118,28 +111,12 @@ HRESULT CCredential::Initialize(
         {
             DebugPrint("RDP Login: User enrolled — starting directly in OTP step");
             _config->isSecondStep = true;
-            _config->isEnrollment = false;
             initialFsp = s_rgScenarioOTPStep;
         }
         else
         {
-            DebugPrint("RDP Login: User not enrolled — starting directly in Enrollment step");
-            _config->isEnrollment = true;
+            DebugPrint("RDP Login: User not enrolled and not excluded. Blocking login.");
             _config->isSecondStep = false;
-            initialFsp = s_rgScenarioEnrollment;
-
-            // Generate TOTP secret immediately
-            _enrollmentSecret = TOTPEngine::GenerateSecret(20);
-            _enrollmentBase32 = TOTPEngine::Base32Encode(_enrollmentSecret);
-
-            string usernameUTF8 = TOTPEngine::WideToUTF8(cleanUser);
-            string issuerUTF8 = TOTPEngine::WideToUTF8(_config->issuerName);
-            string otpauthURI = TOTPEngine::BuildOTPAuthURI(
-                _enrollmentBase32, usernameUTF8, issuerUTF8,
-                _config->totpDigits, _config->totpPeriod);
-
-            if (_hQRBitmap) DeleteObject(_hQRBitmap);
-            _hQRBitmap = QRCode::GenerateBitmap(otpauthURI, 4);
         }
     }
 
@@ -153,20 +130,10 @@ HRESULT CCredential::Initialize(
         switch (i)
         {
         case FID_LARGE_TEXT:
-            if (_config->isEnrollment)
-                hr = SHStrDupW(L"Set Up Authenticator", &_rgFieldStrings[i]);
-            else
-                hr = SHStrDupW(_config->loginText.c_str(), &_rgFieldStrings[i]);
+            hr = SHStrDupW(_config->loginText.c_str(), &_rgFieldStrings[i]);
             break;
         case FID_SMALL_TEXT:
-            if (_config->isEnrollment)
-            {
-                wstring hint = L"Scan the QR code, or enter this manual key:\n" +
-                               TOTPEngine::UTF8ToWide(_enrollmentBase32) + 
-                               L"\n\nThen enter the 6-digit code below.";
-                hr = SHStrDupW(hint.c_str(), &_rgFieldStrings[i]);
-            }
-            else if (_config->isSecondStep)
+            if (_config->isSecondStep)
             {
                 hr = SHStrDupW(L"Enter the code from your authenticator app.", &_rgFieldStrings[i]);
             }
@@ -246,7 +213,6 @@ HRESULT CCredential::SetDeselected()
 
     // Reset state
     _config->isSecondStep = false;
-    _config->isEnrollment = false;
     _authSuccess = false;
 
     return S_OK;
@@ -287,46 +253,28 @@ HRESULT CCredential::GetBitmapValue(
 
     if (dwFieldID == FID_LOGO && phbmp)
     {
-        // During enrollment, show QR code as the tile image
-        if (_config->isEnrollment && !_enrollmentBase32.empty())
+        // Load custom bitmap or default tile
+        HBITMAP hbmp = nullptr;
+        if (!_config->bitmapPath.empty())
         {
-            wstring cleanUser = GetCleanUsername();
-            string usernameUTF8 = TOTPEngine::WideToUTF8(cleanUser);
-            string issuerUTF8 = TOTPEngine::WideToUTF8(_config->issuerName);
-            string otpauthURI = TOTPEngine::BuildOTPAuthURI(
-                _enrollmentBase32, usernameUTF8, issuerUTF8,
-                _config->totpDigits, _config->totpPeriod);
+            DWORD attrib = GetFileAttributesW(_config->bitmapPath.c_str());
+            if (attrib != INVALID_FILE_ATTRIBUTES)
+            {
+                hbmp = (HBITMAP)LoadImageW(nullptr, _config->bitmapPath.c_str(),
+                    IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE);
+            }
+        }
+        if (!hbmp)
+            hbmp = LoadBitmap(HINST_THISDLL, MAKEINTRESOURCE(IDB_TILE_IMAGE));
 
-            // Generate a fresh 32-bit ARGB DIB directly for LogonUI.
-            // CopyImage on the cached _hQRBitmap previously stripped the 32-bit format!
-            *phbmp = QRCode::GenerateBitmap(otpauthURI, 4);
-            if (*phbmp) hr = S_OK;
+        if (hbmp)
+        {
+            *phbmp = hbmp;
+            hr = S_OK;
         }
         else
         {
-            // Load custom bitmap or default tile
-            HBITMAP hbmp = nullptr;
-            if (!_config->bitmapPath.empty())
-            {
-                DWORD attrib = GetFileAttributesW(_config->bitmapPath.c_str());
-                if (attrib != INVALID_FILE_ATTRIBUTES)
-                {
-                    hbmp = (HBITMAP)LoadImageW(nullptr, _config->bitmapPath.c_str(),
-                        IMAGE_BITMAP, 0, 0, LR_LOADFROMFILE);
-                }
-            }
-            if (!hbmp)
-                hbmp = LoadBitmap(HINST_THISDLL, MAKEINTRESOURCE(IDB_TILE_IMAGE));
-
-            if (hbmp)
-            {
-                *phbmp = hbmp;
-                hr = S_OK;
-            }
-            else
-            {
-                hr = HRESULT_FROM_WIN32(GetLastError());
-            }
+            hr = HRESULT_FROM_WIN32(GetLastError());
         }
     }
     else
@@ -345,7 +293,7 @@ HRESULT CCredential::GetSubmitButtonValue(
     {
         // Place submit button next to OTP field if in OTP/enrollment step,
         // otherwise next to password field
-        if (_config->isSecondStep || _config->isEnrollment)
+        if (_config->isSecondStep)
             *pdwAdjacentTo = FID_OTP;
         else
             *pdwAdjacentTo = FID_LDAP_PASS;
@@ -433,9 +381,7 @@ void CCredential::SetScenario(TOTP_SCENARIO scenario)
     case TOTP_SCENARIO::OTP_STEP:
         fsp = s_rgScenarioOTPStep;
         break;
-    case TOTP_SCENARIO::ENROLLMENT:
-        fsp = s_rgScenarioEnrollment;
-        break;
+
     default:
         return;
     }
@@ -484,8 +430,8 @@ HRESULT CCredential::Connect(__in IQueryContinueWithStatus* pqcws)
         return S_OK;
     }
 
-    // --- ENROLLMENT or OTP STEP (second press of Submit) ---
-    if (_config->isSecondStep || _config->isEnrollment)
+    // --- OTP STEP (second press of Submit) ---
+    if (_config->isSecondStep)
     {
         wstring otp = _config->credential.otp;
         if (otp.empty())
@@ -505,18 +451,7 @@ HRESULT CCredential::Connect(__in IQueryContinueWithStatus* pqcws)
             return S_OK;
         }
 
-        // Get the secret to validate against
-        vector<uint8_t> secret;
-        if (_config->isEnrollment && !_enrollmentSecret.empty())
-        {
-            // Use the enrollment secret (not yet stored)
-            secret = _enrollmentSecret;
-        }
-        else
-        {
-            // Use the stored secret
-            secret = SecretStore::GetSecret(userSID);
-        }
+        vector<uint8_t> secret = SecretStore::GetSecret(userSID);
 
         if (secret.empty())
         {
@@ -542,26 +477,7 @@ HRESULT CCredential::Connect(__in IQueryContinueWithStatus* pqcws)
             DebugPrint("TOTP validation successful!");
             _authSuccess = true;
 
-            // If this was enrollment, store the secret and mark enrolled
-            if (_config->isEnrollment)
-            {
-                HRESULT hr = SecretStore::StoreSecret(userSID, _enrollmentSecret);
-                if (SUCCEEDED(hr))
-                {
-                    SecretStore::MarkEnrolled(userSID);
-                    DebugPrint("Enrollment completed — secret stored");
-                }
-                else
-                {
-                    DebugPrint("Failed to store enrollment secret!");
-                }
 
-                // Clear enrollment state
-                SecureZeroMemory(_enrollmentSecret.data(), _enrollmentSecret.size());
-                _enrollmentSecret.clear();
-                _enrollmentBase32.clear();
-                _config->isEnrollment = false;
-            }
         }
         else
         {
@@ -581,36 +497,19 @@ HRESULT CCredential::Connect(__in IQueryContinueWithStatus* pqcws)
         // User is enrolled — move to OTP step
         DebugPrint("User is enrolled — switching to OTP step");
         _config->isSecondStep = true;
-        _config->isEnrollment = false;
+
     }
     else
     {
-        // User NOT enrolled — generate secret and prepare QR code
-        DebugPrint("User not enrolled — generating TOTP secret for enrollment");
-
-        _enrollmentSecret = TOTPEngine::GenerateSecret(20);
-        _enrollmentBase32 = TOTPEngine::Base32Encode(_enrollmentSecret);
-
-        // Build otpauth URI
-        string usernameUTF8 = TOTPEngine::WideToUTF8(cleanUser);
-        string issuerUTF8 = TOTPEngine::WideToUTF8(_config->issuerName);
-
-        string otpauthURI = TOTPEngine::BuildOTPAuthURI(
-            _enrollmentBase32, usernameUTF8, issuerUTF8,
-            _config->totpDigits, _config->totpPeriod);
-
-        DebugPrint("Generated otpauth URI for enrollment");
-
-        // Generate QR code bitmap
-        if (_hQRBitmap)
-        {
-            DeleteObject(_hQRBitmap);
-            _hQRBitmap = nullptr;
-        }
-        _hQRBitmap = QRCode::GenerateBitmap(otpauthURI, 4);
-
-        _config->isEnrollment = true;
-        _config->isSecondStep = false;
+        // User NOT enrolled — Block login!
+        DebugPrint("User not enrolled — blocking login");
+        _authSuccess = false;
+        
+        // Show error message
+        if (_config->provider.status_icon)
+            *_config->provider.status_icon = CPSI_ERROR;
+        if (_config->provider.status_text)
+            SHStrDupW(L"TOTP is required but not configured for this account. Please run TOTPSetup.exe as administrator to enroll.", _config->provider.status_text);
     }
 
     // Delay briefly to prevent LogonUI freezing
@@ -692,50 +591,11 @@ HRESULT CCredential::GetSerialization(
 
         // Reset state
         _config->isSecondStep = false;
-        _config->isEnrollment = false;
 
         return hr;
     }
 
-    // --- ENROLLMENT: Show QR code and OTP input ---
-    if (_config->isEnrollment)
-    {
-        DebugPrint("Showing enrollment screen with QR code");
-        _config->clearFields = false;
 
-        // Switch UI to enrollment scenario
-        SetScenario(TOTP_SCENARIO::ENROLLMENT);
-
-        // Set instruction text
-        if (_pCredProvCredentialEvents)
-        {
-            _pCredProvCredentialEvents->SetFieldString(this, FID_LARGE_TEXT,
-                L"Set Up Authenticator");
-
-            wstring hint = L"Scan the QR code with your authenticator app, "
-                L"then enter the code below.";
-            _pCredProvCredentialEvents->SetFieldString(this, FID_SMALL_TEXT,
-                hint.c_str());
-
-            // Show the manual secret as fallback
-            wstring secretDisplay = L"Manual key: " +
-                TOTPEngine::UTF8ToWide(_enrollmentBase32);
-            // We append it to the hint text
-            hint += L"\n" + secretDisplay;
-            _pCredProvCredentialEvents->SetFieldString(this, FID_SMALL_TEXT,
-                hint.c_str());
-
-            // Clear OTP field
-            _pCredProvCredentialEvents->SetFieldString(this, FID_OTP, L"");
-
-            // Move submit button next to OTP
-            _pCredProvCredentialEvents->SetFieldSubmitButton(this,
-                FID_SUBMIT_BUTTON, FID_OTP);
-        }
-
-        *pcpgsr = CPGSR_NO_CREDENTIAL_NOT_FINISHED;
-        return S_OK;
-    }
 
     // --- OTP STEP: Show OTP input ---
     if (_config->isSecondStep && !_authSuccess)
@@ -809,7 +669,7 @@ HRESULT CCredential::ReportResult(
     {
         DebugPrint("Logon failed — resetting to initial state");
         _config->isSecondStep = false;
-        _config->isEnrollment = false;
+
         _authSuccess = false;
 
         // Reset UI to initial state

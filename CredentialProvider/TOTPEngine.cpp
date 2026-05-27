@@ -313,9 +313,14 @@ std::string TOTPEngine::BuildOTPAuthURI(
     oss << safeIssuer << ":" << safeUsername;
     oss << "?secret=" << base32Secret;
     oss << "&issuer=" << safeIssuer;
-    oss << "&digits=" << digits;
-    oss << "&period=" << period;
-    oss << "&algorithm=SHA1";
+    
+    // Omit default parameters to keep the URI short and QR code small
+    if (digits != 6) {
+        oss << "&digits=" << digits;
+    }
+    if (period != 30) {
+        oss << "&period=" << period;
+    }
 
     return oss.str();
 }

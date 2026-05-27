@@ -122,6 +122,5 @@ private:
 
     // Enrollment state
     HBITMAP                                 _hQRBitmap;
-    std::vector<uint8_t>                    _enrollmentSecret;
-    std::string                             _enrollmentBase32;
+
 };
